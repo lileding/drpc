@@ -5,38 +5,41 @@ use std::os::unix::io::AsRawFd;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::io::{ stderr, Write };
+use std::collections::BTreeMap;
 
-pub trait Handler : AsRawFd {
-    fn handle(&mut self, queue: &mut Queue) -> Result<()>;
+pub trait Target : AsRawFd {
+    fn handle(&mut self, queue: &mut Queue, mask: Mask) -> Result<()>;
+    fn mask(): Mask;
 }
+
+pub type Mask = u32;
+
+pub const ReadEvent: u32 = libc::EPOLLIN;
+pub const WriteEvent: u32 = libc::EPOLLOUT;
+pub const EdgeTrigger: u32 = libc::EPOLLET;
 
 pub struct Queue {
-    epfd: libc::c_int,
-    waiting: Vec<Rc<RefCell<Box<Handler>>>>,
-}
-
-pub enum EventKind {
-    ReadLevel = libc::EPOLLIN as isize,
-    ReadEdge = (libc::EPOLLIN | libc::EPOLLET) as isize,
+    qfd: libc::c_int,
+    pending: BTreeMap<RawFd, Box<Target>>,
 }
 
 impl Queue {
     pub fn new() -> Result<Queue> {
-        let epfd = unsafe { libc::epoll_create(1) };
-        if epfd == -1 {
+        let qfd = unsafe { libc::epoll_create(1) };
+        if qfd == -1 {
             Err(Error::last_os_error())
         } else {
             Ok(Queue {
-                epfd: epfd,
+                qfd: qfd,
                 waiting: vec![],
             })
         }
     }
 
-    pub fn wait(&mut self, timeout: i64) -> Result<Vec<Rc<RefCell<Box<Handler>>>>> {
+    pub fn wait(&mut self, timeout: i64) -> Result<()> {
         let mut active = [libc::epoll_event { events: 0, u64: 0 }; 32];
         let rv = unsafe { libc::epoll_wait(
-            self.epfd,
+            self.qfd,
             active.as_mut_ptr(),
             active.len() as libc::c_int,
             timeout as libc::c_int
@@ -44,41 +47,46 @@ impl Queue {
         if rv == -1 {
             Err(Error::last_os_error())
         } else {
-            let mut v: Vec<Rc<RefCell<Box<Handler>>>> = vec![];
             for e in active.iter().take(rv as usize) {
-                v.push(self.waiting[e.u64 as usize].clone());
+                let mut h = try!(self.pending.get_mut(e.u64 as RawFd));
+                h.handle(self, e.events as Mask).unwrap_or_else(|e| {
+                    writeln!(stderr(), "handle fail: {:?}", e).unwrap_or(());
+                });
             }
-            Ok(v)
+            Ok(())
         }
     }
 
-    pub fn watch(&mut self, h: Rc<RefCell<Box<Handler>>>, e: EventKind) -> Result<()> {
-        let fd = h.as_ref().borrow().as_raw_fd();
-        self.waiting.push(h);
-        let idx = self.waiting.len() - 1;
-        writeln!(stderr(), "watch {} at {}", fd, idx).unwrap_or(());
+    pub fn watch<T: Target>(&mut self, target: T) -> Result<()> {
+        let fd = t.as_raw_fd();
         let mut ev = libc::epoll_event {
-            events: e as libc::uint32_t,
-            u64: idx as libc::uint64_t,
+            events: target.mask() as libc::uint32_t,
+            u64: fd as libc::uint64_t,
         };
+        self.pending.insert(fd, Box::new(target));
         let rv = unsafe { libc::epoll_ctl(
-            self.epfd,
+            self.qfd,
             libc::EPOLL_CTL_ADD,
             fd as libc::c_int,
             &mut ev as *mut libc::epoll_event)
         };
+        writeln!(stderr(), "watch fd={} as {}", fd, rv).unwrap_or(());
         if rv == -1 {
             Err(Error::last_os_error())
         } else {
             Ok(())
         }
     }
+
+    pub fn unwatch<T: Target>(&mut self, fd: RawFd) -> Option<Target> {
+        None
+    }
 }
 
 impl Drop for Queue {
     fn drop(&mut self) {
-        if self.epfd != -1 {
-            unsafe { libc::close(self.epfd); };
+        if self.qfd != -1 {
+            unsafe { libc::close(self.qfd); };
         }
     }
 }
