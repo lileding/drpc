@@ -1,7 +1,0 @@
-[package]
-name = "serpc"
-version = "0.1.0"
-authors = ["root"]
-
-[dependencies]
-libc = "0.2.15"
