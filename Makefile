@@ -15,6 +15,9 @@ clean:
 
 rebuild: clean all
 
+test: all
+	make -C test test
+
 $(LIB): $(OBJ)
 	$(AR) $(ARFLAGS) $@ $^
 

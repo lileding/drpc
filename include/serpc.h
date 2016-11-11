@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 #define SERPC_LOG(level, fmt, ...) \
-    fprintf(stderr, "SERPC " #level " " fmt "\n", ##__VA_ARGS__)
+    fprintf(stderr, "SERPC " #level " %s %d " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
 namespace serpc {
 

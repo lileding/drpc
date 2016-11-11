@@ -15,6 +15,9 @@ clean:
 
 rebuild: clean all
 
+test: all
+	./serpc
+
 $(APP): $(OBJ) ../libserpc.a
 	$(LD) -o $@ $^ $(LDFLAGS)
 
