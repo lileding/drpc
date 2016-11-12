@@ -2,23 +2,21 @@
 #define SERPC_SRC_QUEUE_H
 
 #include <stdint.h>
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
 
 namespace serpc {
 
 class Queue {
 public:
-    inline explicit Queue(int kq) noexcept: _kq(kq) { }
-    inline Queue(Queue&& rhs) noexcept: _kq(rhs._kq) { rhs._kq = -1; }
-    inline Queue& operator=(Queue&& rhs) noexcept {
-        _kq = rhs._kq;
-        rhs._kq = -1;
-        return *this;
-    }
+    Queue() noexcept;
+    ~Queue() noexcept;
+    inline operator bool() noexcept { return _kq != -1; }
 public:
     inline operator int() noexcept { return _kq; }
-    int change(uintptr_t ident, int16_t filter, uint16_t flags,
-            uint32_t fflags, intptr_t data, void* udata) noexcept;
-    int wait(struct kevent* eventlist, int nevents) noexcept;
+    int change(intptr_t ident,
+            int16_t filter, uint16_t flags, void* udata=nullptr) noexcept;
 private:
     int _kq;
 };

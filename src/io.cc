@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -42,6 +43,19 @@ IOStatus IOJobBase::write(int fd) noexcept {
         }
     }
     return DONE;
+}
+
+IOJob<char>::~IOJob() noexcept {
+    if (_buf) {
+        free(_buf);
+        _sz = 0;
+    }
+}
+
+void IOJob<char>::reset(size_t sz) noexcept {
+    _buf = reinterpret_cast<char*>(realloc(_buf, sz));
+    _sz = sz;
+    IOJobBase::reset(_buf, _sz);
 }
 
 } /* namespace serpc */
