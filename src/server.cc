@@ -8,6 +8,13 @@
 
 namespace serpc {
 
+struct Session {
+    Session(): is_header(1) { }
+    IOJob<Header> header;
+    IOJob<char> body;
+    unsigned is_header:1;
+};
+
 class ServerImpl {
 public:
     ServerImpl(const char* hostname, const char* servname);
@@ -18,18 +25,15 @@ public:
 private:
     void loop() noexcept;
     void do_accept() noexcept;
-    void do_read(int sock) noexcept;
-    void do_write(int sock) noexcept;
+    void do_read(int sock, Session* sess) noexcept;
+    void do_write(int sock, Session* sess) noexcept;
 private:
-    bool do_read_header(int sock) noexcept;
-    bool do_read_body(int sock) noexcept;
+    bool do_read_header(int sock, Session* sess) noexcept;
+    bool do_read_body(int sock, Session* sess) noexcept;
 private:
     EndPoint _ep;
     Queue _q;
     std::thread _thread;
-    bool _read_header;
-    IOJob<Header> _header;
-    IOJob<char> _body;
 };
 
 Server::Server(const char* hostname, const char* servname):
@@ -48,7 +52,7 @@ Server::~Server() noexcept {
 }
 
 ServerImpl::ServerImpl(const char* hostname, const char* servname):
-        _ep(hostname, servname), _read_header(true) {
+        _ep(hostname, servname) {
     if (!_ep || !_q) {
         return;
     }
@@ -81,10 +85,10 @@ void ServerImpl::loop() noexcept {
                 do_accept();
             } else {
                 if (ev->filter & EVFILT_READ) {
-                    do_read(ev->ident);
+                    do_read(ev->ident, reinterpret_cast<Session*>(ev->udata));
                 }
                 if (ev->filter & EVFILT_WRITE) {
-                    do_write(ev->ident);
+                    do_write(ev->ident, reinterpret_cast<Session*>(ev->udata));
                 }
             }
         }
@@ -100,7 +104,7 @@ void ServerImpl::do_accept() noexcept {
             }
             break;
         }
-        if (_q.change(sock, EVFILT_READ, EV_ADD | EV_CLEAR) == -1) {
+        if (_q.change(sock, EVFILT_READ, EV_ADD | EV_CLEAR, new Session()) == -1) {
             SERPC_LOG(WARNING, "add kevent fail: %s", strerror(errno));
             shutdown(sock, SHUT_RDWR);
         }
@@ -108,48 +112,53 @@ void ServerImpl::do_accept() noexcept {
     // TODO close here
 }
 
-void ServerImpl::do_read(int sock) noexcept {
+void ServerImpl::do_read(int sock, Session* sess) noexcept {
     bool goon = true;
     do {
-        goon = _read_header ? do_read_header(sock) : do_read_body(sock);
+        goon = sess->is_header ?
+            do_read_header(sock, sess) :
+            do_read_body(sock, sess);
     } while (goon);
 }
 
-void ServerImpl::do_write(int sock) noexcept {
+void ServerImpl::do_write(int sock, Session* sess) noexcept {
 }
 
-bool ServerImpl::do_read_header(int sock) noexcept {
-    auto rv = _header.read(sock);
+bool ServerImpl::do_read_header(int sock, Session* sess) noexcept {
+    auto rv = sess->header.read(sock);
     SERPC_LOG(DEBUG, "read header %d", rv);
     if (rv == CONTINUE) {
         return false;
     } else if (rv == ERROR) {
         close(sock);
+        delete sess;
         return false;
     } else {
-        SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu", _header->seq, _header->size);
-        if (_header->size == 0) {
-            _header.reset();
+        auto h = sess->header;
+        SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu", h->seq, h->size);
+        if (h->size == 0) {
+            h.reset();
         } else {
-            _body.reset(_header->size);
-            _read_header = false;
+            sess->body.reset(h->size);
+            sess->is_header = false;
         }
         return true;
     }
 }
 
-bool ServerImpl::do_read_body(int sock) noexcept {
-    auto rv = _body.read(sock);
+bool ServerImpl::do_read_body(int sock, Session* sess) noexcept {
+    auto rv = sess->body.read(sock);
     SERPC_LOG(DEBUG, "read body %d", rv);
     if (rv == CONTINUE) {
         return false;
     } else if (rv == ERROR) {
         close(sock);
+        delete sess;
         return false;
     } else {
-        SERPC_LOG(DEBUG, "read \"%s\"", _body.data());
-        _read_header = true;
-        _header.reset();
+        SERPC_LOG(DEBUG, "read \"%s\"", sess->body.data());
+        sess->is_header = true;
+        sess->header.reset();
         return true;
     }
 }
