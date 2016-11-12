@@ -78,9 +78,14 @@ void ClientImpl::invoke(std::function<void(int)>&& done) noexcept {
     header->version = 0x1;
     header->compress = 0x0;
     header->seq = _seq++;
-    header->size = 0;
+    header->size = 6;
     auto rv = header.write(_ep);
-    SERPC_LOG(DEBUG, "client write %d", rv);
+    SERPC_LOG(DEBUG, "client write header %d", rv);
+    IOJob<char> body;
+    body.reset(6);
+    memcpy(body, "hello", 6);
+    rv = body.write(_ep);
+    SERPC_LOG(DEBUG, "client write body %d", rv);
     //_pbuf.push(std::move(msg));
     // _callbacks.push(std::move(done));
     //do_write();

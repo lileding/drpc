@@ -21,8 +21,8 @@ private:
     void do_read(int sock) noexcept;
     void do_write(int sock) noexcept;
 private:
-    void do_read_header(int sock) noexcept;
-    void do_read_body(int sock) noexcept;
+    bool do_read_header(int sock) noexcept;
+    bool do_read_body(int sock) noexcept;
 private:
     EndPoint _ep;
     Queue _q;
@@ -109,35 +109,49 @@ void ServerImpl::do_accept() noexcept {
 }
 
 void ServerImpl::do_read(int sock) noexcept {
-    if (_read_header) {
-        do_read_header(sock);
-    } else {
-        do_read_body(sock);
-    }
+    bool goon = true;
+    do {
+        goon = _read_header ? do_read_header(sock) : do_read_body(sock);
+    } while (goon);
 }
 
 void ServerImpl::do_write(int sock) noexcept {
 }
 
-void ServerImpl::do_read_header(int sock) noexcept {
-    SERPC_LOG(DEBUG, "try read header");
+bool ServerImpl::do_read_header(int sock) noexcept {
     auto rv = _header.read(sock);
-    SERPC_LOG(DEBUG, "read client %d", rv);
+    SERPC_LOG(DEBUG, "read header %d", rv);
     if (rv == CONTINUE) {
-        return;
+        return false;
     } else if (rv == ERROR) {
         close(sock);
-        return;
+        return false;
     } else {
         SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu", _header->seq, _header->size);
         if (_header->size == 0) {
             _header.reset();
+        } else {
+            _body.reset(_header->size);
+            _read_header = false;
         }
+        return true;
     }
 }
 
-void ServerImpl::do_read_body(int sock) noexcept {
-    SERPC_LOG(DEBUG, "try read body");
+bool ServerImpl::do_read_body(int sock) noexcept {
+    auto rv = _body.read(sock);
+    SERPC_LOG(DEBUG, "read body %d", rv);
+    if (rv == CONTINUE) {
+        return false;
+    } else if (rv == ERROR) {
+        close(sock);
+        return false;
+    } else {
+        SERPC_LOG(DEBUG, "read \"%s\"", _body.data());
+        _read_header = true;
+        _header.reset();
+        return true;
+    }
 }
 
 } /* namespace serpc */
