@@ -28,23 +28,23 @@ private:
 };
 
 template <size_t N>
-class IOJob {
+class IOJob : public IOJobBase {
 public:
     inline IOJob(): IOJobBase(_buf, N) { }
     inline explicit IOJob(size_t pending): IOJobBase(_buf, pending) { }
 public:
     inline operator char*() noexcept { return _buf; }
     inline char* data() noexcept { return _buf; }
-    inline static size_t size() noexcept constexpr { return N; }
+    inline static constexpr size_t size() noexcept { return N; }
 private:
     char _buf[N];
 };
 
 template <>
-class IOJob<0> {
+class IOJob<0> : public IOJobBase {
 public:
     inline IOJob(const char* buf, size_t pending) noexcept:
-        IOJobBase(buf, pending) { }
+        IOJobBase(const_cast<char*>(buf), pending) { }
 };
 
 } /* namespace serpc */
