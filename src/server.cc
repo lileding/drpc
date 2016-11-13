@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <functional>
 #include <thread>
 #include <unistd.h>
@@ -8,11 +9,25 @@
 
 namespace serpc {
 
+enum SessionStatus {
+    READ_HEADER = 0,
+    READ_BODY,
+};
+
 struct Session {
-    Session(): is_header(1) { }
-    IOJob<Header> header;
-    IOJob<char> body;
-    unsigned is_header:1;
+    inline Session() noexcept:
+        body(nullptr),
+        io(reinterpret_cast<char*>(&header), sizeof(header)),
+        status(READ_HEADER) { }
+    inline ~Session() noexcept {
+        if (body) {
+            free(body);
+        }
+    }
+    struct Header header;
+    char* body;
+    IOJob io;
+    SessionStatus status;
 };
 
 class ServerImpl {
@@ -115,9 +130,16 @@ void ServerImpl::do_accept() noexcept {
 void ServerImpl::do_read(int sock, Session* sess) noexcept {
     bool goon = true;
     do {
-        goon = sess->is_header ?
-            do_read_header(sock, sess) :
-            do_read_body(sock, sess);
+        switch (sess->status) {
+        case READ_HEADER:
+            goon = do_read_header(sock, sess);
+            break;
+        case READ_BODY:
+            goon = do_read_body(sock, sess);
+            break;
+        default:
+            break;
+        }
     } while (goon);
 }
 
@@ -125,7 +147,7 @@ void ServerImpl::do_write(int sock, Session* sess) noexcept {
 }
 
 bool ServerImpl::do_read_header(int sock, Session* sess) noexcept {
-    auto rv = sess->header.read(sock);
+    auto rv = sess->io.read(sock);
     SERPC_LOG(DEBUG, "read header %d", rv);
     if (rv == CONTINUE) {
         return false;
@@ -134,20 +156,21 @@ bool ServerImpl::do_read_header(int sock, Session* sess) noexcept {
         delete sess;
         return false;
     } else {
-        auto h = sess->header;
+        auto h = &sess->header;
         SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu", h->seq, h->size);
         if (h->size == 0) {
-            h.reset();
+            sess->io.reset(reinterpret_cast<char*>(h), sizeof(sess->header));
         } else {
-            sess->body.reset(h->size);
-            sess->is_header = false;
+            sess->body = reinterpret_cast<char*>(realloc(sess->body, h->size));
+            sess->io.reset(sess->body, h->size);
+            sess->status = READ_BODY;
         }
         return true;
     }
 }
 
 bool ServerImpl::do_read_body(int sock, Session* sess) noexcept {
-    auto rv = sess->body.read(sock);
+    auto rv = sess->io.read(sock);
     SERPC_LOG(DEBUG, "read body %d", rv);
     if (rv == CONTINUE) {
         return false;
@@ -156,9 +179,10 @@ bool ServerImpl::do_read_body(int sock, Session* sess) noexcept {
         delete sess;
         return false;
     } else {
-        SERPC_LOG(DEBUG, "read \"%s\"", sess->body.data());
-        sess->is_header = true;
-        sess->header.reset();
+        SERPC_LOG(DEBUG, "read \"%s\"", sess->body);
+        sess->io.reset(
+                reinterpret_cast<char*>(&sess->header), sizeof(sess->header));
+        sess->status = READ_HEADER;
         return true;
     }
 }

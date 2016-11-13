@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/uio.h>
@@ -7,7 +6,7 @@
 
 namespace serpc {
 
-IOStatus IOJobBase::read(int fd) noexcept {
+IOStatus IOJob::read(int fd) noexcept {
     while (_pending) {
         ssize_t len = ::read(fd, _base, _pending);
         if (len == 0) {
@@ -26,7 +25,7 @@ IOStatus IOJobBase::read(int fd) noexcept {
     return DONE;
 }
 
-IOStatus IOJobBase::write(int fd) noexcept {
+IOStatus IOJob::write(int fd) noexcept {
     while (_pending) {
         ssize_t len = ::write(fd, _base, _pending);
         if (len == 0) {
@@ -43,19 +42,6 @@ IOStatus IOJobBase::write(int fd) noexcept {
         }
     }
     return DONE;
-}
-
-IOJob<char>::~IOJob() noexcept {
-    if (_buf) {
-        free(_buf);
-        _sz = 0;
-    }
-}
-
-void IOJob<char>::reset(size_t sz) noexcept {
-    _buf = reinterpret_cast<char*>(realloc(_buf, sz));
-    _sz = sz;
-    IOJobBase::reset(_buf, _sz);
 }
 
 } /* namespace serpc */

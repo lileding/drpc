@@ -74,17 +74,13 @@ ClientImpl::~ClientImpl() noexcept {
 }
 
 void ClientImpl::invoke(std::function<void(int)>&& done) noexcept {
-    IOJob<Header> header;
-    header->version = 0x1;
-    header->compress = 0x0;
-    header->seq = _seq++;
-    header->size = 6;
-    auto rv = header.write(_ep);
+    struct Header header = { 0x1, 0x0, 0x0, _seq++, 0x0, 0x0, 6 };
+    IOJob io { reinterpret_cast<char*>(&header), sizeof(header) };
+    auto rv = io.write(_ep);
     SERPC_LOG(DEBUG, "client write header %d", rv);
-    IOJob<char> body;
-    body.reset(6);
-    memcpy(body, "hello", 6);
-    rv = body.write(_ep);
+    static char body[] = "hello";
+    io.reset(body, 6);
+    rv = io.write(_ep);
     SERPC_LOG(DEBUG, "client write body %d", rv);
     //_pbuf.push(std::move(msg));
     // _callbacks.push(std::move(done));
