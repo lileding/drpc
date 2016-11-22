@@ -1,4 +1,4 @@
-LIB=libserpc.a
+LIB=libdrpc.a
 SRC=$(wildcard src/*.cc)
 OBJ=$(patsubst %.cc,%.o,$(SRC))
 
@@ -12,6 +12,7 @@ all: $(LIB)
 .PHONY: clean
 clean:
 	rm -f $(LIB) $(OBJ)
+	make -C test clean
 
 rebuild: clean all
 

@@ -1,10 +1,10 @@
-#ifndef SERPC_SRC_QUEUE_H
-#define SERPC_SRC_QUEUE_H
+#ifndef DRPC_SRC_QUEUE_H
+#define DRPC_SRC_QUEUE_H
 
 #include <stdint.h>
 #include <sys/event.h>
 
-namespace serpc {
+namespace drpc {
 
 class Queue {
 public:
@@ -19,7 +19,7 @@ private:
     int _kq;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_QUEUE_H */
+#endif /* DRPC_SRC_QUEUE_H */
 

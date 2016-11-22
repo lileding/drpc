@@ -1,14 +1,14 @@
 #include <thread>
 #include <map>
 #include <queue>
-#include <serpc.h>
+#include <drpc.h>
 #include "signal.h"
 #include "endpoint.h"
 #include "queue.h"
 #include "channel.h"
 #include "controller.h"
 
-namespace serpc {
+namespace drpc {
 
 class ClientImpl;
 
@@ -54,7 +54,7 @@ Client::Client(const char* hostname, const char* servname):
 
 Client::~Client() noexcept {
     if (!*this) return;
-    SERPC_LOG(DEBUG, "client dtor");
+    DRPC_LOG(DEBUG, "client dtor");
     delete _impl;
     _impl = nullptr;
 }
@@ -78,9 +78,9 @@ ClientImpl::ClientImpl(const char* hostname, const char* servname) noexcept:
         return;
     }
     auto rv = _q.change(_stop.receiver(), EVFILT_READ, EV_ADD | EV_ONESHOT);
-    SERPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
+    DRPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
     rv = _q.change(_chan.ident(), EVFILT_READ | EVFILT_WRITE, EV_ADD | EV_CLEAR);
-    SERPC_ENSURE(rv != -1, "add channel fail: %s", strerror(errno));
+    DRPC_ENSURE(rv != -1, "add channel fail: %s", strerror(errno));
     _thread = std::thread { std::mem_fn(&ClientImpl::loop), this };
 }
 
@@ -115,13 +115,13 @@ void ClientImpl::loop() noexcept {
     do {
         auto rv = kevent(_q, nullptr, 0, evs, 2, nullptr);
         if (rv == -1) {
-            SERPC_LOG(WARNING, "kevent fail: %s", strerror(errno));
+            DRPC_LOG(WARNING, "kevent fail: %s", strerror(errno));
             break;
         }
         for (int i = 0; i < rv; i++) {
             auto ev = &evs[i];
             if (ev->ident == _stop.receiver()) {
-                SERPC_LOG(DEBUG, "client got stop event");
+                DRPC_LOG(DEBUG, "client got stop event");
                 stop = true;
                 break;
             } else {
@@ -131,5 +131,5 @@ void ClientImpl::loop() noexcept {
     } while (!stop);
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

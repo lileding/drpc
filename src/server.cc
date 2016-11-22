@@ -3,13 +3,13 @@
 #include <functional>
 #include <thread>
 #include <unistd.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "signal.h"
 #include "endpoint.h"
 #include "queue.h"
 #include "channel.h"
 
-namespace serpc {
+namespace drpc {
 
 class ServerChannel : public Channel {
 public:
@@ -53,9 +53,9 @@ ServerImpl::ServerImpl(const char* hostname, const char* servname):
         _ep(EndPoint::listen(hostname, servname)) {
     if (!_ep || !_q || !_stop) return;
     auto rv = _q.change(_stop.receiver(), EVFILT_READ, EV_ADD | EV_ONESHOT);
-    SERPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
+    DRPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
     rv = _q.change(_ep, EVFILT_READ, EV_ADD);
-    SERPC_ENSURE(rv != -1, "add acceptor fail: %s", strerror(errno));
+    DRPC_ENSURE(rv != -1, "add acceptor fail: %s", strerror(errno));
     _thread = std::thread { std::mem_fn(&ServerImpl::loop), this };
 }
 
@@ -79,7 +79,7 @@ void ServerImpl::loop() noexcept {
             if (ev->ident == static_cast<int>(_ep)) {
                 do_accept();
             } else if (ev->ident == _stop.receiver()) {
-                SERPC_LOG(DEBUG, "server got STOP event");
+                DRPC_LOG(DEBUG, "server got STOP event");
                 stop = true;
                 break;
             } else {
@@ -88,7 +88,7 @@ void ServerImpl::loop() noexcept {
         }
     } while (!stop);
 
-    SERPC_LOG(ERROR, "kevent fail: %s", strerror(errno));
+    DRPC_LOG(ERROR, "kevent fail: %s", strerror(errno));
     // TODO release channel here
 }
 
@@ -97,7 +97,7 @@ void ServerImpl::do_accept() noexcept {
         auto sock = _ep.accept();
         if (sock == -1) {
             if (errno != EAGAIN) {
-                SERPC_LOG(ERROR, "accept fail: %s", strerror(errno));
+                DRPC_LOG(ERROR, "accept fail: %s", strerror(errno));
             }
             break;
         }
@@ -106,7 +106,7 @@ void ServerImpl::do_accept() noexcept {
                 sock, EVFILT_READ | EVFILT_WRITE, EV_ADD | EV_CLEAR,
                 chan.get());
         if (rv == -1) {
-            SERPC_LOG(WARNING, "add kevent fail: %s", strerror(errno));
+            DRPC_LOG(WARNING, "add kevent fail: %s", strerror(errno));
             continue;
         }
         chan.release();
@@ -128,5 +128,5 @@ bool ServerChannel::on_message(const Message& msg) noexcept {
     return true;
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

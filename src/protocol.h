@@ -1,9 +1,9 @@
-#ifndef SERPC_SRC_PROTOCOL_H
-#define SERPC_SRC_PROTOCOL_H
+#ifndef DRPC_SRC_PROTOCOL_H
+#define DRPC_SRC_PROTOCOL_H
 
 #include <stdint.h>
 
-namespace serpc {
+namespace drpc {
 
 struct Header {
     unsigned version:4;
@@ -17,7 +17,7 @@ struct Message {
     void* body;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_PROTOCOL_H */
+#endif /* DRPC_SRC_PROTOCOL_H */
 

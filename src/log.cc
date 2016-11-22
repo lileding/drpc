@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdarg.h>
-#include <serpc.h>
+#include <drpc.h>
 
-namespace serpc {
+namespace drpc {
 
 int log(const char* fmt, ...) noexcept {
     va_list vg;
@@ -12,5 +12,5 @@ int log(const char* fmt, ...) noexcept {
     return rv;
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

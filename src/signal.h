@@ -1,7 +1,7 @@
-#ifndef SERPC_SRC_SIGNAL_H
-#define SERPC_SRC_SIGNAL_H
+#ifndef DRPC_SRC_SIGNAL_H
+#define DRPC_SRC_SIGNAL_H
 
-namespace serpc {
+namespace drpc {
 
 class Signal {
 public:
@@ -16,7 +16,7 @@ private:
     int _fildes[2];
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_SIGNAL_H */
+#endif /* DRPC_SRC_SIGNAL_H */
 

@@ -1,4 +1,4 @@
-APP=serpc
+APP=drpc
 SRC=$(wildcard *.cc)
 OBJ=$(patsubst %.cc,%.o,$(SRC))
 
@@ -16,9 +16,9 @@ clean:
 rebuild: clean all
 
 test: all
-	./serpc
+	./drpc
 
-$(APP): $(OBJ) ../libserpc.a
+$(APP): $(OBJ) ../libdrpc.a
 	$(LD) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cc

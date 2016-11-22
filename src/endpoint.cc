@@ -5,10 +5,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "endpoint.h"
 
-namespace serpc {
+namespace drpc {
 
 class AddrInfo {
 public:
@@ -27,20 +27,20 @@ EndPoint EndPoint::listen(
     AddrInfo ai { hostname, servname };
     if (!ai) return -1;
     auto sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-    SERPC_ENSURE_OR(sock != -1, -1, "socket fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(sock != -1, -1, "socket fail: %s", strerror(errno));
     EndPoint ep { sock };
     auto rv = fcntl(sock, F_GETFL, 0);
-    SERPC_ENSURE_OR(rv != -1, -1, "fcntl get fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv != -1, -1, "fcntl get fail: %s", strerror(errno));
     rv = fcntl(sock, F_SETFL, rv | O_NONBLOCK);
-    SERPC_ENSURE_OR(rv != -1, -1, "fcntl set fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv != -1, -1, "fcntl set fail: %s", strerror(errno));
     static const int REUSEADDR = 1;
     rv = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
             &REUSEADDR, sizeof(REUSEADDR));
-    SERPC_ENSURE_OR(rv == 0, -1, "set reuseaddr fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv == 0, -1, "set reuseaddr fail: %s", strerror(errno));
     rv = bind(sock, ai->ai_addr, ai->ai_addrlen);
-    SERPC_ENSURE_OR(rv == 0, -1, "bind fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv == 0, -1, "bind fail: %s", strerror(errno));
     rv = ::listen(sock, backlog);
-    SERPC_ENSURE_OR(rv == 0, -1, "listen fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv == 0, -1, "listen fail: %s", strerror(errno));
     return ep;
 }
 
@@ -49,14 +49,14 @@ EndPoint EndPoint::connect(
     AddrInfo ai { hostname, servname };
     if (!ai) return -1;
     auto sock = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-    SERPC_ENSURE_OR(sock != -1, -1, "socket fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(sock != -1, -1, "socket fail: %s", strerror(errno));
     EndPoint ep { sock };
     auto rv = ::connect(sock, ai->ai_addr, ai->ai_addrlen);
-    SERPC_ENSURE_OR(rv != -1, -1, "connect fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv != -1, -1, "connect fail: %s", strerror(errno));
     rv = fcntl(sock, F_GETFL, 0);
-    SERPC_ENSURE_OR(rv != -1, -1, "fcntl get fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv != -1, -1, "fcntl get fail: %s", strerror(errno));
     rv = fcntl(sock, F_SETFL, rv | O_NONBLOCK);
-    SERPC_ENSURE_OR(rv != -1, -1, "fcntl set fail: %s", strerror(errno));
+    DRPC_ENSURE_OR(rv != -1, -1, "fcntl set fail: %s", strerror(errno));
     return ep;
 }
 
@@ -71,13 +71,13 @@ int EndPoint::accept() noexcept {
     if (sock == -1) return -1;
     auto rv = fcntl(_sock, F_GETFL, 0);
     if (rv == -1) {
-        SERPC_LOG(ERROR, "fcntl get fail: %s", strerror(errno));
+        DRPC_LOG(ERROR, "fcntl get fail: %s", strerror(errno));
         close(sock);
         return -1;
     }
     rv = fcntl(sock, F_SETFL, rv | O_NONBLOCK);
     if (rv == -1) {
-        SERPC_LOG(ERROR, "fcntl set fail: %s", strerror(errno));
+        DRPC_LOG(ERROR, "fcntl set fail: %s", strerror(errno));
         close(sock);
         return -1;
     }
@@ -89,8 +89,8 @@ AddrInfo::AddrInfo(const char* hostname, const char* servname) noexcept:
     static const struct addrinfo HINT = {
         0, PF_INET, SOCK_STREAM, IPPROTO_TCP };
     auto rv = getaddrinfo(hostname, servname, &HINT, &_ai);
-    SERPC_ENSURE(rv == 0, "getaddrinfo fail: %s", gai_strerror(rv));
+    DRPC_ENSURE(rv == 0, "getaddrinfo fail: %s", gai_strerror(rv));
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

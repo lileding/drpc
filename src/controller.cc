@@ -1,7 +1,7 @@
-#include <serpc.h>
+#include <drpc.h>
 #include "controller.h"
 
-namespace serpc {
+namespace drpc {
 
 Controller::Controller() noexcept {
     _impl = new ControllerImpl();
@@ -29,5 +29,5 @@ void ControllerImpl::unlock() noexcept {
     _cv.notify_one();
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

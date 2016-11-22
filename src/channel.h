@@ -1,5 +1,5 @@
-#ifndef SERPC_SRC_CHANNEL_H
-#define SERPC_SRC_CHANNEL_H
+#ifndef DRPC_SRC_CHANNEL_H
+#define DRPC_SRC_CHANNEL_H
 
 #include <stdint.h>
 #include <queue>
@@ -8,7 +8,7 @@
 
 struct kevent;
 
-namespace serpc {
+namespace drpc {
 
 class Queue;
 
@@ -36,7 +36,7 @@ private:
     bool _recv_flag;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_CHANNEL_H */
+#endif /* DRPC_SRC_CHANNEL_H */
 

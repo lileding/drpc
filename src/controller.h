@@ -1,11 +1,11 @@
-#ifndef SERPC_SRC_CONTROLLER_H
-#define SERPC_SRC_CONTROLLER_H
+#ifndef DRPC_SRC_CONTROLLER_H
+#define DRPC_SRC_CONTROLLER_H
 
 #include <mutex>
 #include <condition_variable>
-#include <serpc.h>
+#include <drpc.h>
 
-namespace serpc {
+namespace drpc {
 
 class ControllerImpl {
 public:
@@ -22,6 +22,6 @@ private:
     std::condition_variable _cv;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_CONTROLLER_H */
+#endif /* DRPC_SRC_CONTROLLER_H */

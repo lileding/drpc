@@ -1,30 +1,31 @@
 #include <vector>
 #include <utility>
 #include <unistd.h>
-#include <serpc.h>
+#include <drpc.h>
 
 int main(int argc, char* argv[]) {
-    ::serpc::Server server { "localhost", "12321" };
+    ::drpc::Server server { "localhost", "12321" };
     if (!server) {
         return -1;
     }
 
-    ::serpc::Client client { "localhost", "12321" };
+    ::drpc::Client client { "localhost", "12321" };
     if (!client) {
         return -1;
     }
 
-    std::vector<std::pair<::serpc::Controller, std::string>> calls;
-    for (char x = 'A'; x < 'D'; x++) {
+    static const int CALLS = 2;
+    std::vector<std::pair<::drpc::Controller, std::string>> calls;
+    for (int i = 0; i < CALLS; i++) {
         calls.emplace_back();
         auto& ctx = calls.back();
         std::string req { "hello" };
-        req[4] = x;
+        req[4] = ('A' + i);
         client.call(&ctx.first, req, &ctx.second);
     }
     for (auto& ctx: calls) {
         ctx.first.wait();
-        SERPC_LOG(DEBUG, "got response: \"%s\"", ctx.second.c_str());
+        DRPC_LOG(DEBUG, "got response: \"%s\"", ctx.second.c_str());
     }
 
     //sleep(1);

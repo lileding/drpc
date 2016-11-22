@@ -2,14 +2,14 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "signal.h"
 
-namespace serpc {
+namespace drpc {
 
 Signal::Signal() noexcept: _fildes{-1, -1} {
     auto rv = pipe(_fildes);
-    SERPC_ENSURE(rv == 0, "create pipe fail");
+    DRPC_ENSURE(rv == 0, "create pipe fail");
 }
 
 Signal::~Signal() noexcept {
@@ -25,8 +25,8 @@ void Signal::notify() noexcept {
     if (!*this) return;
     static const char MSG[] = { '\0' };
     auto rv = write(_fildes[1], MSG, sizeof(MSG));
-    SERPC_ENSURE(rv == sizeof(MSG), "notify fail: %s", strerror(errno));
+    DRPC_ENSURE(rv == sizeof(MSG), "notify fail: %s", strerror(errno));
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

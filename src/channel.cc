@@ -5,12 +5,12 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "channel.h"
 #include "queue.h"
 #include "controller.h"
 
-namespace serpc {
+namespace drpc {
 
 Channel::Channel(int sock) noexcept:
         _sock(sock),
@@ -34,12 +34,12 @@ void Channel::send(const Message& msg) noexcept {
 
 void Channel::on_event(Queue* q, struct kevent* ev) noexcept {
     if (ev->flags & EV_EOF) {
-        SERPC_LOG(DEBUG, "channel eof event fd:%d", ev->ident);
+        DRPC_LOG(DEBUG, "channel eof event fd:%d", ev->ident);
         delete this;
         return;
     }
     if (ev->flags & EV_ERROR) {
-        SERPC_LOG(DEBUG, "channel error event err:%s", strerror(ev->data));
+        DRPC_LOG(DEBUG, "channel error event err:%s", strerror(ev->data));
         delete this;
         return;
     }
@@ -58,13 +58,13 @@ void Channel::on_recv() noexcept {
         if (rv == CONTINUE) {
             return;
         } else if (rv == ERROR) {
-            SERPC_LOG(ERROR, "channel receive fail: %s", strerror(errno));
+            DRPC_LOG(ERROR, "channel receive fail: %s", strerror(errno));
             // FIXME delete this;
             delete this;
             break;
         } else /* rv == DONE */ {
             if (_recv_flag) {
-                SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu",
+                DRPC_LOG(DEBUG, "header, seq=%lu, size=%lu",
                         _recv_buf.header.sequence, _recv_buf.header.payload);
                 if (_recv_buf.header.payload == 0) {
                     _receiver.reset(&_recv_buf.header, sizeof(_recv_buf.header));
@@ -88,7 +88,7 @@ void Channel::on_send() noexcept {
     while (1) {
         if (!_send_buf) {
             if (_send_queue.empty()) {
-                SERPC_LOG(DEBUG, "channel send idle");
+                DRPC_LOG(DEBUG, "channel send idle");
                 return; // nothing to do
             } else {
                 _send_buf = &_send_queue.front();
@@ -102,7 +102,7 @@ void Channel::on_send() noexcept {
         if (rv == CONTINUE) {
             return;
         } else if (rv == ERROR) {
-            SERPC_LOG(ERROR, "channel send fail: %s", strerror(errno));
+            DRPC_LOG(ERROR, "channel send fail: %s", strerror(errno));
             // FIXME oops
             return;
         } else {
@@ -119,5 +119,5 @@ void Channel::on_send() noexcept {
     }
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

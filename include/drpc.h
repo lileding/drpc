@@ -1,29 +1,29 @@
-#ifndef SERPC_H
-#define SERPC_H
+#ifndef DRPC_H
+#define DRPC_H
 
 #include <string>
 #include <functional>
 
-#define SERPC_LOG(level, fmt, ...) \
-    ::serpc::log("SERPC " #level " %s %d " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#define DRPC_LOG(level, fmt, ...) \
+    ::drpc::log("DRPC " #level " %s %d " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__)
 
-#define SERPC_ENSURE(expr, fmt, ...) \
+#define DRPC_ENSURE(expr, fmt, ...) \
     do { \
         if (!(expr)) { \
-            SERPC_LOG(ERROR, fmt, ##__VA_ARGS__); \
+            DRPC_LOG(ERROR, fmt, ##__VA_ARGS__); \
             return; \
         } \
     } while (0)
 
-#define SERPC_ENSURE_OR(expr, val, fmt, ...) \
+#define DRPC_ENSURE_OR(expr, val, fmt, ...) \
     do { \
         if (!(expr)) { \
-            SERPC_LOG(ERROR, fmt, ##__VA_ARGS__); \
+            DRPC_LOG(ERROR, fmt, ##__VA_ARGS__); \
             return (val); \
         } \
     } while (0)
 
-namespace serpc {
+namespace drpc {
 
 int log(const char* fmt, ...) noexcept;
 
@@ -91,7 +91,7 @@ private:
     ClientImpl* _impl;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_H */
+#endif /* DRPC_H */
 

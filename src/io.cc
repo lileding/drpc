@@ -2,10 +2,10 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "io.h"
 
-namespace serpc {
+namespace drpc {
 
 IOStatus IOJob::read(int fd) noexcept {
     while (_nbyte) {
@@ -45,5 +45,5 @@ IOStatus IOJob::write(int fd) noexcept {
     return DONE;
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 

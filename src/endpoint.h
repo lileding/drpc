@@ -1,9 +1,9 @@
-#ifndef SERPC_SRC_ENDPOINT_H
-#define SERPC_SRC_ENDPOINT_H
+#ifndef DRPC_SRC_ENDPOINT_H
+#define DRPC_SRC_ENDPOINT_H
 
 #include <stdint.h>
 
-namespace serpc {
+namespace drpc {
 
 class EndPoint {
 public:
@@ -29,7 +29,7 @@ private:
     int _sock;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_ENDPOINT_H */
+#endif /* DRPC_SRC_ENDPOINT_H */
 

@@ -1,9 +1,9 @@
-#ifndef SERPC_SRC_IO_H
-#define SERPC_SRC_IO_H
+#ifndef DRPC_SRC_IO_H
+#define DRPC_SRC_IO_H
 
 #include <stddef.h>
 
-namespace serpc {
+namespace drpc {
 
 enum IOStatus {
     DONE = 0,
@@ -28,7 +28,7 @@ protected:
     size_t _nbyte;
 };
 
-} /* namespace serpc */
+} /* namespace drpc */
 
-#endif /* SERPC_SRC_IO_H */
+#endif /* DRPC_SRC_IO_H */
 

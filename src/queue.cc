@@ -4,13 +4,13 @@
 #include <sys/types.h>
 #include <sys/event.h>
 #include <sys/time.h>
-#include <serpc.h>
+#include <drpc.h>
 #include "queue.h"
 
-namespace serpc {
+namespace drpc {
 
 Queue::Queue() noexcept: _kq(kqueue()) {
-    SERPC_ENSURE(_kq != -1, "kqueue fail: %s", strerror(errno));
+    DRPC_ENSURE(_kq != -1, "kqueue fail: %s", strerror(errno));
 }
 
 Queue::~Queue() noexcept {
@@ -27,5 +27,5 @@ int Queue::change(intptr_t ident,
     return kevent(_kq, &ev, 1, nullptr, 0, nullptr);
 }
 
-} /* namespace serpc */
+} /* namespace drpc */
 
