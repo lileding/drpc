@@ -9,8 +9,8 @@ public:
     ~Signal() noexcept;
     inline operator bool() noexcept { return _fildes[0] != -1; }
 public:
-    inline int sender() noexcept { return _fildes[0]; }
-    inline int receiver() noexcept { return _fildes[1]; }
+    inline int sender() noexcept { return _fildes[1]; }
+    inline int receiver() noexcept { return _fildes[0]; }
     void notify() noexcept;
 private:
     int _fildes[2];

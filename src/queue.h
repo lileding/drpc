@@ -2,9 +2,7 @@
 #define SERPC_SRC_QUEUE_H
 
 #include <stdint.h>
-#include <sys/types.h>
 #include <sys/event.h>
-#include <sys/time.h>
 
 namespace serpc {
 

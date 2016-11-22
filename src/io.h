@@ -13,19 +13,19 @@ enum IOStatus {
 
 class IOJob {
 public:
-    inline IOJob() noexcept: _base(nullptr), _pending(0) { }
-    inline IOJob(char* base, size_t pending) noexcept:
-        _base(base), _pending(pending) { }
+    inline IOJob() noexcept: _buf(nullptr), _nbyte(0) { }
+    inline IOJob(void* buf, size_t nbyte) noexcept:
+        _buf(buf), _nbyte(nbyte) { }
 public:
-    inline void reset(char* base, size_t pending) noexcept {
-        _base = base;
-        _pending = pending;
+    inline void reset(void* buf, size_t nbyte) noexcept {
+        _buf = buf;
+        _nbyte = nbyte;
     }
     IOStatus read(int fd) noexcept;
     IOStatus write(int fd) noexcept;
 protected:
-    char* _base;
-    size_t _pending;
+    void* _buf;
+    size_t _nbyte;
 };
 
 } /* namespace serpc */

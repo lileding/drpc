@@ -1,33 +1,21 @@
 #include <stdlib.h>
+#include <memory>
 #include <functional>
 #include <thread>
 #include <unistd.h>
 #include <serpc.h>
+#include "signal.h"
 #include "endpoint.h"
 #include "queue.h"
-#include "io.h"
+#include "channel.h"
 
 namespace serpc {
 
-enum SessionStatus {
-    READ_HEADER = 0,
-    READ_BODY,
-};
-
-struct Session {
-    inline Session() noexcept:
-        body(nullptr),
-        io(reinterpret_cast<char*>(&header), sizeof(header)),
-        status(READ_HEADER) { }
-    inline ~Session() noexcept {
-        if (body) {
-            free(body);
-        }
-    }
-    struct Header header;
-    char* body;
-    IOJob io;
-    SessionStatus status;
+class ServerChannel : public Channel {
+public:
+    inline explicit ServerChannel(int sock) noexcept: Channel(sock) { }
+protected:
+    bool on_message(const Message& msg) noexcept;
 };
 
 class ServerImpl {
@@ -35,19 +23,15 @@ public:
     ServerImpl(const char* hostname, const char* servname);
     ~ServerImpl() noexcept;
     inline operator bool() noexcept {
-        return _ep && _q && _thread.joinable();
+        return _ep && _q && _stop && _thread.joinable();
     }
 private:
     void loop() noexcept;
     void do_accept() noexcept;
-    void do_read(int sock, Session* sess) noexcept;
-    void do_write(int sock, Session* sess) noexcept;
-private:
-    bool do_read_header(int sock, Session* sess) noexcept;
-    bool do_read_body(int sock, Session* sess) noexcept;
 private:
     EndPoint _ep;
     Queue _q;
+    Signal _stop;
     std::thread _thread;
 };
 
@@ -60,131 +44,88 @@ Server::Server(const char* hostname, const char* servname):
 }
 
 Server::~Server() noexcept {
-    if (_impl) {
-        delete _impl;
-        _impl = nullptr;
-    }
+    if (!*this) return;
+    delete _impl;
+    _impl = nullptr;
 }
 
 ServerImpl::ServerImpl(const char* hostname, const char* servname):
-        _ep(hostname, servname) {
-    if (!_ep || !_q) {
-        return;
-    }
-    if (!_ep.listen(1024)) {
-        return;
-    }
-    auto rv = _q.change(_ep, EVFILT_READ, EV_ADD);
+        _ep(EndPoint::listen(hostname, servname)) {
+    if (!_ep || !_q || !_stop) return;
+    auto rv = _q.change(_stop.receiver(), EVFILT_READ, EV_ADD | EV_ONESHOT);
+    SERPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
+    rv = _q.change(_ep, EVFILT_READ, EV_ADD);
     SERPC_ENSURE(rv != -1, "add acceptor fail: %s", strerror(errno));
     _thread = std::thread { std::mem_fn(&ServerImpl::loop), this };
 }
 
 ServerImpl::~ServerImpl() noexcept {
-    if (_thread.joinable()) {
-        _thread.join();
-    }
+    if (!*this) return;
+    _stop.notify();
+    _thread.join();
 }
 
 void ServerImpl::loop() noexcept {
     static const int NEVENT = 1024;
     struct kevent evs[NEVENT];
-    while (1) {
-        auto rv = kevent(static_cast<int>(_q), nullptr, 0, evs, NEVENT, nullptr);
+    bool stop = false;
+    do {
+        auto rv = kevent(_q, nullptr, 0, evs, NEVENT, nullptr);
         if (rv == -1) {
-            SERPC_LOG(ERROR, "kevent fail: %s", strerror(errno));
             break;
         }
         for (int i = 0; i < rv; i++) {
             auto ev = &evs[i];
             if (ev->ident == static_cast<int>(_ep)) {
                 do_accept();
+            } else if (ev->ident == _stop.receiver()) {
+                SERPC_LOG(DEBUG, "server got STOP event");
+                stop = true;
+                break;
             } else {
-                if (ev->filter & EVFILT_READ) {
-                    do_read(ev->ident, reinterpret_cast<Session*>(ev->udata));
-                }
-                if (ev->filter & EVFILT_WRITE) {
-                    do_write(ev->ident, reinterpret_cast<Session*>(ev->udata));
-                }
+                reinterpret_cast<Channel*>(ev->udata)->on_event(&_q, ev);
             }
         }
-    }
+    } while (!stop);
+
+    SERPC_LOG(ERROR, "kevent fail: %s", strerror(errno));
+    // TODO release channel here
 }
 
 void ServerImpl::do_accept() noexcept {
     while (1) {
-        auto sock = accept(_ep, nullptr, nullptr);
+        auto sock = _ep.accept();
         if (sock == -1) {
-            if (errno == EAGAIN) {
-                return;
+            if (errno != EAGAIN) {
+                SERPC_LOG(ERROR, "accept fail: %s", strerror(errno));
             }
             break;
         }
-        if (_q.change(sock, EVFILT_READ, EV_ADD | EV_CLEAR, new Session()) == -1) {
+        std::unique_ptr<Channel> chan { new ServerChannel(sock) };
+        auto rv = _q.change(
+                sock, EVFILT_READ | EVFILT_WRITE, EV_ADD | EV_CLEAR,
+                chan.get());
+        if (rv == -1) {
             SERPC_LOG(WARNING, "add kevent fail: %s", strerror(errno));
-            shutdown(sock, SHUT_RDWR);
+            continue;
         }
-    }
-    // TODO close here
-}
-
-void ServerImpl::do_read(int sock, Session* sess) noexcept {
-    bool goon = true;
-    do {
-        switch (sess->status) {
-        case READ_HEADER:
-            goon = do_read_header(sock, sess);
-            break;
-        case READ_BODY:
-            goon = do_read_body(sock, sess);
-            break;
-        default:
-            break;
-        }
-    } while (goon);
-}
-
-void ServerImpl::do_write(int sock, Session* sess) noexcept {
-}
-
-bool ServerImpl::do_read_header(int sock, Session* sess) noexcept {
-    auto rv = sess->io.read(sock);
-    SERPC_LOG(DEBUG, "read header %d", rv);
-    if (rv == CONTINUE) {
-        return false;
-    } else if (rv == ERROR) {
-        close(sock);
-        delete sess;
-        return false;
-    } else {
-        auto h = &sess->header;
-        SERPC_LOG(DEBUG, "header, seq=%lu, size=%lu", h->seq, h->size);
-        if (h->size == 0) {
-            sess->io.reset(reinterpret_cast<char*>(h), sizeof(sess->header));
-        } else {
-            sess->body = reinterpret_cast<char*>(realloc(sess->body, h->size));
-            sess->io.reset(sess->body, h->size);
-            sess->status = READ_BODY;
-        }
-        return true;
+        chan.release();
     }
 }
 
-bool ServerImpl::do_read_body(int sock, Session* sess) noexcept {
-    auto rv = sess->io.read(sock);
-    SERPC_LOG(DEBUG, "read body %d", rv);
-    if (rv == CONTINUE) {
-        return false;
-    } else if (rv == ERROR) {
-        close(sock);
-        delete sess;
-        return false;
-    } else {
-        SERPC_LOG(DEBUG, "read \"%s\"", sess->body);
-        sess->io.reset(
-                reinterpret_cast<char*>(&sess->header), sizeof(sess->header));
-        sess->status = READ_HEADER;
-        return true;
-    }
+bool ServerChannel::on_message(const Message& msg) noexcept {
+    char* body = strndup(reinterpret_cast<char*>(msg.body), msg.header.payload);
+    Message reply {
+        Header {
+            0x1,
+            0x0,
+            msg.header.sequence,
+            6
+        },
+        body,
+    };
+    send(reply);
+    return true;
 }
 
 } /* namespace serpc */

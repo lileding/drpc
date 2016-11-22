@@ -2,25 +2,31 @@
 #define SERPC_SRC_ENDPOINT_H
 
 #include <stdint.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
 
 namespace serpc {
 
 class EndPoint {
 public:
-    EndPoint(const char* hostname, const char* servname) noexcept;
+    static EndPoint listen(
+            const char* hostname, const char* servname, int backlog=1024) noexcept;
+    static EndPoint connect(
+            const char* hostname, const char* servname) noexcept;
     ~EndPoint() noexcept;
     inline operator bool() noexcept { return _sock != -1; }
+    inline EndPoint(EndPoint&& rhs) noexcept: _sock(rhs._sock) { rhs._sock = -1; }
+    inline EndPoint& operator=(EndPoint&& rhs) noexcept {
+        _sock = rhs._sock;
+        rhs._sock = -1;
+        return *this;
+    }
 public:
+    int accept() noexcept;
     inline operator int() noexcept { return _sock; }
     inline operator intptr_t() noexcept { return _sock; }
-    bool listen(int backlog) noexcept;
-    bool connect() noexcept;
+private:
+    inline EndPoint(int sock) noexcept: _sock(sock) { }
 private:
     int _sock;
-    struct addrinfo* _ai;
 };
 
 } /* namespace serpc */
