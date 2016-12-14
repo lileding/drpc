@@ -2,22 +2,21 @@
 #define DRPC_SRC_PROTOCOL_H
 
 #include <stdint.h>
+#include <sys/queue.h>
 
-namespace drpc {
-
-struct Header {
+struct drpc_header {
     unsigned version:4;
     unsigned compress:4;
     uint32_t sequence;
     uint32_t payload;
 };
 
-struct Message {
-    struct Header header;
-    void* body;
+struct drpc_message {
+    struct drpc_header header;
+    char* body;
 };
 
-} /* namespace drpc */
+typedef struct drpc_message* drpc_message_t;
 
 #endif /* DRPC_SRC_PROTOCOL_H */
 

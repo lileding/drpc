@@ -1,35 +1,11 @@
 #ifndef DRPC_SRC_ENDPOINT_H
 #define DRPC_SRC_ENDPOINT_H
 
-#include <stdint.h>
+int drpc_listen(const char* hostname, const char* servname, int backlog);
 
-namespace drpc {
+int drpc_connect(const char* hostname, const char* servname);
 
-class EndPoint {
-public:
-    static EndPoint listen(
-            const char* hostname, const char* servname, int backlog=1024) noexcept;
-    static EndPoint connect(
-            const char* hostname, const char* servname) noexcept;
-    ~EndPoint() noexcept;
-    inline operator bool() noexcept { return _sock != -1; }
-    inline EndPoint(EndPoint&& rhs) noexcept: _sock(rhs._sock) { rhs._sock = -1; }
-    inline EndPoint& operator=(EndPoint&& rhs) noexcept {
-        _sock = rhs._sock;
-        rhs._sock = -1;
-        return *this;
-    }
-public:
-    int accept() noexcept;
-    inline operator int() noexcept { return _sock; }
-    inline operator intptr_t() noexcept { return _sock; }
-private:
-    inline EndPoint(int sock) noexcept: _sock(sock) { }
-private:
-    int _sock;
-};
-
-} /* namespace drpc */
+int drpc_set_nonblock(int fd);
 
 #endif /* DRPC_SRC_ENDPOINT_H */
 

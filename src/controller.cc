@@ -8,10 +8,10 @@ Controller::Controller() noexcept {
 }
 
 Controller::~Controller() noexcept {
-    delete _impl;
 }
 
 void Controller::wait() noexcept {
+    DRPC_ENSURE(_impl != nullptr, "invalid controller");
     _impl->wait();
 }
 

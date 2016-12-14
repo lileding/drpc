@@ -1,7 +1,61 @@
-#include <thread>
-#include <map>
-#include <queue>
-#include <drpc.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include "client.h"
+#include "endpoint.h"
+
+#if 0
+static void* do_loop(void* arg);
+
+drpc_client_t drpc_client_new(const char* hostname, const char* servname) {
+    DRPC_ENSURE_OR(hostname && servname, NULL, "invalid argument");
+    drpc_client_t client = (drpc_client_t)malloc(sizeof(*client));
+    if (!client) {
+        return NULL;
+    }
+    client->endpoint = drpc_connect(hostname, servname);
+    if (client->endpoint == -1) {
+        drpc_client_drop(client);
+        return NULL;
+    }
+    if (drpc_signal_open(&client->quit) != 0) {
+        drpc_client_drop(client);
+        return NULL;
+    }
+    if (drpc_queue_open(&client->queue) != 0) {
+        drpc_client_drop(client);
+        return NULL;
+    }
+    if (pthread_create(&client->thread, NULL, do_loop, client) != 0) {
+        drpc_client_drop(client);
+        return NULL;
+    }
+    return client;
+}
+
+void drpc_client_drop(drpc_client_t client) {
+    if (!client) {
+        return;
+    }
+    drpc_signal_notify(&client->quit);
+    pthread_join(client->thread, NULL); /* wait for end loop */
+    drpc_signal_close(&client->quit);
+    drpc_queue_close(&client->queue);
+    if (client->endpoint != -1) {
+        close(client->endpoint);
+    }
+    free(client);
+    DRPC_LOG(DEBUG, "client exit");
+}
+
+void* do_loop(void* arg) {
+    drpc_client_t client = (drpc_client_t)arg;
+    DRPC_LOG(DEBUG, "client works, endpoint=%d, queue=%d", client->endpoint, client->queue.kq);
+    drpc_channel_t chan = drpc_channel_new(client->endpoint);
+    return NULL;
+}
+
+#endif
+#if 0
 #include "signal.h"
 #include "endpoint.h"
 #include "queue.h"
@@ -132,4 +186,5 @@ void ClientImpl::loop() noexcept {
 }
 
 } /* namespace drpc */
+#endif
 

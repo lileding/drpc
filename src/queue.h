@@ -4,22 +4,21 @@
 #include <stdint.h>
 #include <sys/event.h>
 
-namespace drpc {
-
-class Queue {
-public:
-    Queue() noexcept;
-    ~Queue() noexcept;
-    inline operator bool() noexcept { return _kq != -1; }
-public:
-    inline operator int() noexcept { return _kq; }
-    int change(intptr_t ident,
-            int16_t filter, uint16_t flags, void* udata=nullptr) noexcept;
-private:
-    int _kq;
+struct drpc_queue {
+    int kq;
 };
+typedef struct drpc_queue* drpc_queue_t;
 
-} /* namespace drpc */
+int drpc_queue_open(drpc_queue_t queue);
+
+void drpc_queue_close(drpc_queue_t queue);
+
+#define DRPC_FILT_READ     0x0001
+#define DRPC_FILT_WRITE    0x0010
+#define DRPC_EVENT_EDGE    0x1000
+
+int drpc_queue_add(drpc_queue_t queue, intptr_t ident,
+        uint32_t flags, void* data);
 
 #endif /* DRPC_SRC_QUEUE_H */
 

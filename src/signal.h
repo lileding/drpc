@@ -1,22 +1,19 @@
 #ifndef DRPC_SRC_SIGNAL_H
 #define DRPC_SRC_SIGNAL_H
 
-namespace drpc {
-
-class Signal {
-public:
-    Signal() noexcept;
-    ~Signal() noexcept;
-    inline operator bool() noexcept { return _fildes[0] != -1; }
-public:
-    inline int sender() noexcept { return _fildes[1]; }
-    inline int receiver() noexcept { return _fildes[0]; }
-    void notify() noexcept;
-private:
-    int _fildes[2];
+struct drpc_signal {
+    int fildes[2];
 };
 
-} /* namespace drpc */
+typedef struct drpc_signal* drpc_signal_t;
+
+int drpc_signal_open(drpc_signal_t sig);
+
+void drpc_signal_close(drpc_signal_t sig);
+
+int drpc_signal_yield(drpc_signal_t sig);
+
+int drpc_signal_notify(drpc_signal_t sig);
 
 #endif /* DRPC_SRC_SIGNAL_H */
 
