@@ -4,44 +4,29 @@
 #include <unistd.h>
 #include <drpc.h>
 
-using ::drpc::Server;
-using ::drpc::Client;
-using ::drpc::Controller;
-using ::drpc::String;
+static bool g_run = true;
+
+static void on_exit(int) noexcept;
 
 int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
-    Server server { "localhost", "12321" };
+    signal(SIGINT, on_exit);
+    signal(SIGTERM, on_exit);
+
+    drpc_set_loglevel(DRPC_LOGLEVEL_DEBUG);
+    ::drpc::Server server { "localhost", "12321" };
     if (!server) {
         return -1;
     }
 
-#if 0
-    Client client { "localhost", "12321" };
-    if (!client) {
-        return -1;
+    while (g_run) {
+        sleep(1);
     }
-    Client client { "localhost", "12321" };
-    if (!client) {
-        return -1;
-    }
-
-    static const int CALLS = 2;
-    std::vector<std::pair<Controller, String>> calls;
-    for (int i = 0; i < CALLS; i++) {
-        calls.emplace_back();
-        auto& ctx = calls.back();
-        String req { "hello" };
-        req[4] = ('A' + i);
-        client.call(&ctx.first, req, &ctx.second);
-    }
-    for (auto& ctx: calls) {
-        auto scope = ctx.first.wait();
-        DRPC_LOG(DEBUG, "got response: \"%s\"", ctx.second.c_str());
-    }
-#endif
-
-    //sleep(1);
+    DRPC_LOG(DEBUG, "test exit");
     return 0;
+}
+
+void on_exit(int) noexcept {
+    g_run = false;
 }
 

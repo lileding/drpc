@@ -6,10 +6,17 @@
 #include <string.h>
 #include <sys/uio.h>
 
+#define DRPC_LOGLEVEL_DEBUG     1
+#define DRPC_LOGLEVEL_INFO      2
+#define DRPC_LOGLEVEL_NOTICE    3
+#define DRPC_LOGLEVEL_WARNING   4
+#define DRPC_LOGLEVEL_ERROR     5
+#define DRPC_LOGLEVEL_FATAL     6
+
 #define DRPC_LOG(level, fmt, ...) \
     do { \
         char __buf[27] = {'\0'}; \
-        drpc_log("[DRPC] " #level " %s " __FILE__ ":%d " fmt "\n", \
+        drpc_log(DRPC_LOGLEVEL_##level, "[DRPC] " #level " %s " __FILE__ ":%d " fmt "\n", \
              drpc_now(__buf, sizeof(__buf)), __LINE__, ##__VA_ARGS__); \
     } while (0)
 
@@ -35,7 +42,9 @@ extern "C" {
 
 const char* drpc_now(char* buf, size_t bufsz);
 
-int drpc_log(const char* fmt, ...);
+int drpc_log(int level, const char* fmt, ...);
+
+int drpc_set_loglevel(int level);
 
 /* CONTROLLER */
 struct drpc_controller;

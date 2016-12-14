@@ -2,7 +2,6 @@
 #define DRPC_SRC_PROTOCOL_H
 
 #include <stdint.h>
-#include <sys/queue.h>
 
 struct drpc_header {
     unsigned version:4;

@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include "channel.h"
 
-int drpc_send(int fd, struct iovec* iov) {
+int drpc_write(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = write(fd, iov->iov_base, iov->iov_len);
         if (len <= 0) {
@@ -21,7 +21,7 @@ int drpc_send(int fd, struct iovec* iov) {
     return DRPC_IO_COMPLETE;
 }
 
-int drpc_recv(int fd, struct iovec* iov) {
+int drpc_read(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = read(fd, iov->iov_base, iov->iov_len);
         if (len <= 0) {

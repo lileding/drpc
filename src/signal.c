@@ -3,32 +3,52 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <drpc.h>
+#include "mem.h"
 #include "signal.h"
+#include "endpoint.h"
 
-int drpc_signal_open(drpc_signal_t sig) {
-    DRPC_ENSURE_OR(sig, -1, "invalid argument");
-    return pipe(sig->fildes);
+drpc_signal_t drpc_signal_new() {
+    drpc_signal_t sig = (drpc_signal_t)drpc_alloc(sizeof(*sig));
+    sig->wait = -1;
+    sig->notify = -1;
+    if (pipe(sig->fildes) == -1) {
+        DRPC_LOG(ERROR, "pipe fail: %s", strerror(errno));
+        drpc_signal_drop(sig);
+        return NULL;
+    }
+    if (drpc_set_nonblock(sig->wait) == -1) {
+        DRPC_LOG(ERROR, "set nonblock fail: %s", strerror(errno));
+        drpc_signal_drop(sig);
+        return NULL;
+    }
+    return sig;
 }
 
-void drpc_signal_close(drpc_signal_t sig) {
-    if (!sig) return;
-    if (sig->fildes[0] != -1) {
-        close(sig->fildes[0]);
+void drpc_signal_drop(drpc_signal_t sig) {
+    if (!sig) {
+        return;
     }
-    if (sig->fildes[1] != -1) {
-        close(sig->fildes[1]);
+    if (sig->wait != -1) {
+        close(sig->wait);
     }
+    if (sig->notify != -1) {
+        close(sig->notify);
+    }
+    drpc_free(sig);
 }
 
 int drpc_signal_yield(drpc_signal_t sig) {
     DRPC_ENSURE_OR(sig, -1, "invalid argument");
-    return sig->fildes[0];
+    return sig->wait;
 }
 
 int drpc_signal_notify(drpc_signal_t sig) {
     DRPC_ENSURE_OR(sig, -1, "invalid argument");
     static const char MSG[] = { '\0' };
-    ssize_t len = write(sig->fildes[1], MSG, sizeof(MSG));
-    return len > 0 ? 0 : -1;
+    ssize_t len = write(sig->notify, MSG, sizeof(MSG));
+    if (len != sizeof(MSG)) {
+        DRPC_LOG(ERROR, "write pipe fail: %s", strerror(errno));
+    }
+    return len == sizeof(MSG) ? 0 : -1;
 }
 

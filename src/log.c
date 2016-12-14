@@ -16,11 +16,24 @@ const char* drpc_now(char* buf, size_t bufsz) {
     return buf;
 }
 
-int drpc_log(const char* fmt, ...) {
+static int drpc_loglevel = DRPC_LOGLEVEL_NOTICE;
+
+int drpc_log(int level, const char* fmt, ...) {
+    if (level < drpc_loglevel) {
+        return 0;
+    }
     va_list vg;
     va_start(vg, fmt);
     int rv = vfprintf(stderr, fmt, vg);
     va_end(vg);
     return rv;
+}
+
+int drpc_set_loglevel(int level) {
+    int old = drpc_loglevel;
+    if (level >= DRPC_LOGLEVEL_DEBUG && level <= DRPC_LOGLEVEL_FATAL) {
+        drpc_loglevel = level;
+    }
+    return old;
 }
 
