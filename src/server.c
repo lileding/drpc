@@ -36,8 +36,24 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
         drpc_server_drop(server);
         return NULL;
     }
-    server->thread = 0;
-    if (pthread_create(&server->thread, NULL, do_loop, server) != 0) {
+    server->thread_num = 1; // FIXME
+    server->threads = (pthread_t*)drpc_alloc(sizeof(pthread_t) * server->thread_num);
+    if (!server->threads) {
+        drpc_server_drop(server);
+        return NULL;
+    }
+    for (size_t i = 0; i < server->thread_num; i++) {
+        server->threads[i] = 0;
+        int err = pthread_create(server->threads + i, NULL, do_loop, server);
+        if (err != 0) {
+            DRPC_LOG(ERROR, "pthread_create fail: %s", strerror(err));
+            drpc_server_drop(server);
+            return NULL;
+        }
+    }
+    int err = pthread_mutex_init(&server->mutex, NULL);
+    if (err != 0) {
+        DRPC_LOG(ERROR, "pthread_mutex_init fail: %s", strerror(err));
         drpc_server_drop(server);
         return NULL;
     }
@@ -58,9 +74,13 @@ void drpc_server_drop(drpc_server_t server) {
     if (server->quit) {
         drpc_signal_notify(server->quit);
     }
-    if (server->thread != 0) {
-        pthread_join(server->thread, NULL);
+    if (server->threads) {
+        for (size_t i = 0; i < server->thread_num; i++) {
+            pthread_join(server->threads[i], NULL);
+        }
+        drpc_free(server->threads);
     }
+    pthread_mutex_destroy(&server->mutex);
     drpc_signal_drop(server->quit);
     drpc_queue_close(&server->queue);
     if (server->endpoint != -1) {
@@ -72,7 +92,9 @@ void drpc_server_drop(drpc_server_t server) {
 
 void* do_loop(void* arg) {
     drpc_server_t server = (drpc_server_t)arg;
-    DRPC_LOG(DEBUG, "server works [endpoint=%d] [queue=%d]", server->endpoint, server->queue.kq);
+    DRPC_LOG(DEBUG, "server works [endpoint=%d] [actives=%zu] [queue=%d]",
+        server->endpoint, server->actives, server->queue.kq
+    );
     while (server->endpoint != -1 || server->actives > 0) {
         static const size_t NEVENTS = 1024;
         struct kevent evs[NEVENTS];
@@ -88,9 +110,11 @@ void* do_loop(void* arg) {
                 close(server->endpoint);
                 server->endpoint = -1;
                 drpc_channel_t chan = NULL;
+                pthread_mutex_lock(&server->mutex);
                 STAILQ_FOREACH(chan, &server->channels, entries) {
                     drpc_channel_shutdown_read(chan);
                 }
+                pthread_mutex_unlock(&server->mutex);
             } else if (ev->ident == server->endpoint) {
                 if (on_accept(server) == -1) {
                     close(server->endpoint);
@@ -100,14 +124,18 @@ void* do_loop(void* arg) {
                 drpc_channel_t chan = (drpc_channel_t)ev->udata;
                 int64_t actives = drpc_channel_process(chan, ev->filter);
                 if (actives == -1) {
+                    pthread_mutex_lock(&server->mutex);
                     STAILQ_REMOVE(&server->channels, chan, drpc_channel, entries);
-                    drpc_channel_drop(chan);
                     server->actives--;
+                    pthread_mutex_unlock(&server->mutex);
+                    drpc_channel_drop(chan);
                 } else if (actives == 0 && server->endpoint == -1) {
                     DRPC_LOG(DEBUG, "channel exit [endpoint=%d]", chan->endpoint);
-                    //STAILQ_REMOVE(&server->channels, chan, drpc_channel, entries);
-                    drpc_channel_drop(chan);
+                    pthread_mutex_lock(&server->mutex);
+                    STAILQ_REMOVE(&server->channels, chan, drpc_channel, entries);
                     server->actives--;
+                    pthread_mutex_unlock(&server->mutex);
+                    drpc_channel_drop(chan);
                 }
             }
         }
@@ -142,8 +170,10 @@ int on_accept(drpc_server_t server) {
             drpc_channel_drop(chan);
             continue;
         }
+        pthread_mutex_lock(&server->mutex);
         STAILQ_INSERT_HEAD(&server->channels, chan, entries);
         server->actives++;
+        pthread_mutex_unlock(&server->mutex);
         DRPC_LOG(DEBUG, "server accept sock=%d", sock);
     }
     return -1;

@@ -36,6 +36,9 @@ int drpc_queue_add(drpc_queue_t queue, intptr_t ident,
     if (flags & DRPC_EVENT_EDGE) {
         ev_flags |= EV_CLEAR;
     }
+    if (flags & DRPC_EVENT_ONESHOT) {
+        ev_flags |= EV_ONESHOT;
+    }
     EV_SET(&ev, ident, ev_filter, ev_flags, 0, 0, data);
     return kevent(queue->kq, &ev, 1, NULL, 0, NULL);
 }
