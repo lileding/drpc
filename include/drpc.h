@@ -46,6 +46,7 @@ int drpc_log(int level, const char* fmt, ...);
 
 int drpc_set_loglevel(int level);
 
+#if 0
 /* CONTROLLER */
 struct drpc_controller;
 typedef struct drpc_controller* drpc_controller_t;
@@ -55,6 +56,7 @@ drpc_controller_t drpc_controller_new();
 void drpc_controller_drop(drpc_controller_t controller);
 
 void drpc_controller_wait(drpc_controller_t controller);
+#endif
 
 /* SERVER */
 struct drpc_server;
@@ -68,15 +70,20 @@ void drpc_server_drop(drpc_server_t server);
 struct drpc_client;
 typedef struct drpc_client* drpc_client_t;
 
-drpc_client_t drpc_client_new(const char* hostname, const char* servname);
+struct drpc_channel;
+typedef struct drpc_channel* drpc_channel_t;
+
+drpc_client_t drpc_client_new();
 
 void drpc_client_drop(drpc_client_t client);
 
-void drpc_client_call(
-        drpc_client_t client,
-        drpc_controller_t controller,
-        const struct iovec* request,
-        struct iovec* response
+drpc_channel_t drpc_client_connect(
+    drpc_client_t client, const char* hostname, const char* servname
+);
+
+void drpc_channel_call(
+    drpc_channel_t chan, const char* request, size_t len,
+    void (*callback)(const char*, size_t)
 );
 
 #ifdef __cplusplus
@@ -86,6 +93,7 @@ void drpc_client_call(
 #ifdef __cplusplus
 namespace drpc {
 
+#if 0
 class Controller {
 public:
     inline Controller() noexcept:
@@ -118,6 +126,7 @@ public:
 private:
     ::drpc_controller_t _controller;
 };
+#endif
 
 class Server {
 public:
@@ -146,6 +155,7 @@ private:
     ::drpc_server_t _server;
 };
 
+#if 0
 class String {
 public:
     inline String() noexcept {
@@ -209,11 +219,12 @@ public:
 private:
     struct iovec _iov;
 };
+#endif
 
 class Client {
 public:
-    inline Client(const char* hostname, const char* servname) noexcept:
-        _client(::drpc_client_new(hostname, servname)) { }
+    inline Client() noexcept:
+        _client(::drpc_client_new()) { }
     inline ~Client() noexcept {
         if (_client) {
             ::drpc_client_drop(_client);
@@ -234,14 +245,8 @@ public:
         return *this;
     }
 public:
-    inline void call(Controller cntl,
-            const String& request, String* response) noexcept {
-        ::drpc_client_call(
-                _client,
-                cntl,
-                request,
-                reinterpret_cast<struct iovec*>(response)
-        );
+    ::drpc_channel_t connect(const char* hostname, const char* servname) noexcept {
+        return drpc_client_connect(_client, hostname, servname);
     }
 private:
     ::drpc_client_t _client;

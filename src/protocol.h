@@ -2,6 +2,7 @@
 #define DRPC_SRC_PROTOCOL_H
 
 #include <stdint.h>
+#include <sys/queue.h>
 
 struct drpc_header {
     unsigned version:4;
@@ -11,6 +12,7 @@ struct drpc_header {
 };
 
 struct drpc_message {
+    STAILQ_ENTRY(drpc_message) entries;
     struct drpc_header header;
     char* body;
 };

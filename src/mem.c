@@ -22,14 +22,16 @@ void* drpc_alloc(size_t len) {
         DRPC_LOG(FATAL, "memory full");
         return NULL;
     }
-    void* ptr = base + offset;
+    void* ptr = (char*)base + offset;
     offset += len;
     return ptr;
 }
 
 void drpc_free(void* ptr) {
     if (ptr < base || ptr > base + size) {
-        DRPC_LOG(FATAL, "free invalid ptr [base=%p] [limit=%p] [ptr=%p]", base, base + size, ptr);
+        DRPC_LOG(FATAL, "free invalid ptr [base=%p] [limit=%p] [ptr=%p]",
+            base, (char*)base + size, ptr
+        );
         exit(EXIT_FAILURE);
     }
     // free(ptr);

@@ -4,8 +4,8 @@
 #include <sys/socket.h>
 #include <drpc.h>
 #include "mem.h"
+#include "io.h"
 #include "signal.h"
-#include "endpoint.h"
 
 drpc_signal_t drpc_signal_new() {
     drpc_signal_t sig = (drpc_signal_t)drpc_alloc(sizeof(*sig));

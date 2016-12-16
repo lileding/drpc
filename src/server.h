@@ -5,18 +5,18 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include <drpc.h>
-#include "queue.h"
+#include "event.h"
 #include "signal.h"
+#include "thrpool.h"
 
 struct drpc_server {
     int endpoint;
-    struct drpc_queue queue;
+    struct drpc_event event;
     drpc_signal_t quit;
-    pthread_t* threads;
-    size_t thread_num;
-    pthread_mutex_t mutex;
+    struct drpc_thrpool pool;
+    struct drpc_task iotask;
     STAILQ_HEAD(, drpc_channel) channels;
-    uint64_t actives;
+    volatile uint64_t actives;
 };
 
 #endif /* DRPC_SRC_SERVER_H */

@@ -1,34 +1,53 @@
 #include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
+#include <drpc.h>
+#include "io.h"
+#include "mem.h"
+#include "session.h"
+#include "channel.h"
 #include "client.h"
-#include "endpoint.h"
 
 #if 0
 static void* do_loop(void* arg);
 
-drpc_client_t drpc_client_new(const char* hostname, const char* servname) {
-    DRPC_ENSURE_OR(hostname && servname, NULL, "invalid argument");
-    drpc_client_t client = (drpc_client_t)malloc(sizeof(*client));
+drpc_client_t drpc_client_new() {
+    drpc_client_t client = (drpc_client_t)drpc_alloc(sizeof(*client));
     if (!client) {
         return NULL;
     }
-    client->endpoint = drpc_connect(hostname, servname);
-    if (client->endpoint == -1) {
+    client->quit = drpc_signal_new();
+    if (!client->quit) {
         drpc_client_drop(client);
         return NULL;
     }
-    if (drpc_signal_open(&client->quit) != 0) {
+    if (drpc_event_open(&client->event) != 0) {
         drpc_client_drop(client);
         return NULL;
     }
-    if (drpc_queue_open(&client->queue) != 0) {
+    if (drpc_event_add(&client->event, drpc_signal_yield(client->quit),
+                DRPC_EVENT_READ | DRPC_EVENT_EDGE, NULL) != 0) {
         drpc_client_drop(client);
         return NULL;
     }
-    if (pthread_create(&client->thread, NULL, do_loop, client) != 0) {
+    client->thread_num = 1; // FIXME
+    client->threads = (pthread_t*)drpc_alloc(sizeof(pthread_t) * client->thread_num);
+    if (!client->threads) {
         drpc_client_drop(client);
         return NULL;
     }
+    for (size_t i = 0; i < client->thread_num; i++) {
+        client->threads[i] = 0;
+        int err = pthread_create(client->threads + i, NULL, do_loop, client);
+        if (err != 0) {
+            DRPC_LOG(ERROR, "pthread_create fail: %s", strerror(err));
+            drpc_client_drop(client);
+            return NULL;
+        }
+    }
+    STAILQ_INIT(&client->channels);
+    client->actives = 0;
     return client;
 }
 
@@ -36,155 +55,78 @@ void drpc_client_drop(drpc_client_t client) {
     if (!client) {
         return;
     }
-    drpc_signal_notify(&client->quit);
-    pthread_join(client->thread, NULL); /* wait for end loop */
-    drpc_signal_close(&client->quit);
-    drpc_queue_close(&client->queue);
-    if (client->endpoint != -1) {
-        close(client->endpoint);
+    if (client->quit) {
+        drpc_signal_notify(client->quit);
     }
-    free(client);
+    if (client->threads) {
+        for (size_t i = 0; i < client->thread_num; i++) {
+            pthread_join(client->threads[i], NULL);
+        }
+        drpc_free(client->threads);
+    }
+    drpc_signal_drop(client->quit);
+    drpc_event_close(&client->event);
+    drpc_free(client);
     DRPC_LOG(DEBUG, "client exit");
 }
 
 void* do_loop(void* arg) {
     drpc_client_t client = (drpc_client_t)arg;
-    DRPC_LOG(DEBUG, "client works, endpoint=%d, queue=%d", client->endpoint, client->queue.kq);
-    drpc_channel_t chan = drpc_channel_new(client->endpoint);
+    DRPC_LOG(DEBUG, "client works [actives=%zu] [event=%d]",
+        client->actives, client->event.kq
+    );
+    do {
+        static const size_t NEVENTS = 1024;
+        struct kevent evs[NEVENTS];
+        int rv = kevent(client->event.kq, NULL, 0, evs, NEVENTS, NULL);
+        if (rv < 0) {
+            DRPC_LOG(ERROR, "event fail: %s", strerror(errno));
+            break;
+        }
+        DRPC_LOG(DEBUG, "client got %d event(s)", rv);
+        for (int i = 0; i < rv; i++) {
+            const struct kevent *ev = &evs[i];
+            if (ev->ident == drpc_signal_yield(client->quit)) {
+                DRPC_LOG(DEBUG, "client got quit signal");
+                break;
+            } else {
+                drpc_channel_t chan = (drpc_channel_t)ev->udata;
+                int64_t actives = drpc_channel_process(chan, ev->filter);
+                if (actives == -1) {
+                    STAILQ_REMOVE(&client->channels, chan, drpc_channel, entries);
+                    drpc_channel_drop(chan);
+                    client->actives--;
+                }
+            }
+        }
+        DRPC_LOG(DEBUG, "client loop round [actives=%lu]", client->actives);
+    } while (client->actives > 0);
+    DRPC_LOG(DEBUG, "client loop exit");
     return NULL;
 }
 
-#endif
-#if 0
-#include "signal.h"
-#include "endpoint.h"
-#include "queue.h"
-#include "channel.h"
-#include "controller.h"
-
-namespace drpc {
-
-class ClientImpl;
-
-class ClientChannel : public Channel {
-public:
-    inline ClientChannel(ClientImpl& client, int sock): Channel(sock), _client(client) { }
-public:
-    bool on_message(const Message& msg) noexcept;
-private:
-    ClientImpl& _client;
-};
-
-class ClientImpl {
-public:
-    friend class ClientChannel;
-    inline ClientImpl(const char* hostname, const char* servname) noexcept;
-    ~ClientImpl() noexcept;
-    inline operator bool() noexcept {
-        return _stop && _ep && _q && _thread.joinable();
+drpc_channel_t drpc_client_connect(drpc_client_t client,
+        const char* hostname, const char* servname) {
+    if (!client) {
+        return NULL;
     }
-public:
-    void call(Controller* cntl,
-            const std::string& request, std::string* response) noexcept;
-private:
-    void loop() noexcept;
-private:
-    Signal _stop;
-    EndPoint _ep;
-    ClientChannel _chan;
-    Queue _q;
-    std::thread _thread;
-    uint32_t _seq;
-    std::map<uint32_t, Controller*> _controllers;
-};
-
-Client::Client(const char* hostname, const char* servname):
-        _impl(new ClientImpl(hostname, servname)) {
-    if (!*_impl) {
-        delete _impl;
-        _impl = nullptr;
+    int fd = drpc_connect(hostname, servname);
+    if (fd == -1) {
+        return NULL;
     }
-}
-
-Client::~Client() noexcept {
-    if (!*this) return;
-    DRPC_LOG(DEBUG, "client dtor");
-    delete _impl;
-    _impl = nullptr;
-}
-
-void Client::call(Controller* cntl,
-        const std::string& request, std::string* response) noexcept {
-    return _impl->call(cntl, request, response);
-}
-
-bool ClientChannel::on_message(const Message& msg) noexcept {
-    ControllerImpl* cc = *_client._controllers[msg.header.sequence];
-    cc->buffer()->assign(reinterpret_cast<char*>(msg.body), msg.header.payload);
-    _client._controllers.erase(msg.header.sequence);
-    cc->unlock();
-    return true;
-}
-
-ClientImpl::ClientImpl(const char* hostname, const char* servname) noexcept:
-        _ep(EndPoint::connect(hostname, servname)), _chan(*this, _ep), _seq(0) {
-    if (!_stop || !_ep || !_q) {
-        return;
+    drpc_channel_t chan = drpc_channel_new(fd);
+    if (!chan) {
+        return NULL;
     }
-    auto rv = _q.change(_stop.receiver(), EVFILT_READ, EV_ADD | EV_ONESHOT);
-    DRPC_ENSURE(rv != -1, "add stop receiver fail: %s", strerror(errno));
-    rv = _q.change(_chan.ident(), EVFILT_READ | EVFILT_WRITE, EV_ADD | EV_CLEAR);
-    DRPC_ENSURE(rv != -1, "add channel fail: %s", strerror(errno));
-    _thread = std::thread { std::mem_fn(&ClientImpl::loop), this };
+    chan->client = client;
+    if (drpc_event_add(&client->event, chan->endpoint,
+                DRPC_EVENT_READ | DRPC_EVENT_WRITE | DRPC_EVENT_EDGE, chan) != 0) {
+        drpc_channel_drop(chan);
+        return NULL;
+    }
+    STAILQ_INSERT_TAIL(&client->channels, chan, entries);
+    client->actives++;
+    return chan;
 }
-
-ClientImpl::~ClientImpl() noexcept {
-    if (!*this) return;
-    _stop.notify();
-    _thread.join();
-}
-
-void ClientImpl::call(Controller* cntl,
-        const std::string& request, std::string* response) noexcept {
-    auto cc = static_cast<ControllerImpl*>(*cntl);
-    auto seq = _seq++;
-    _controllers[seq] = cntl;
-    char* body = strndup(request.data(), request.size());
-    Message msg {
-        Header {
-            0x1,
-            0x0,
-            seq,
-            static_cast<uint32_t>(request.size()),
-        },
-        body,
-    };
-    cc->lock(response);
-    _chan.send(msg);
-}
-
-void ClientImpl::loop() noexcept {
-    struct kevent evs[2];
-    bool stop = false;
-    do {
-        auto rv = kevent(_q, nullptr, 0, evs, 2, nullptr);
-        if (rv == -1) {
-            DRPC_LOG(WARNING, "kevent fail: %s", strerror(errno));
-            break;
-        }
-        for (int i = 0; i < rv; i++) {
-            auto ev = &evs[i];
-            if (ev->ident == _stop.receiver()) {
-                DRPC_LOG(DEBUG, "client got stop event");
-                stop = true;
-                break;
-            } else {
-                _chan.on_event(&_q, ev);
-            }
-        }
-    } while (!stop);
-}
-
-} /* namespace drpc */
 #endif
 
