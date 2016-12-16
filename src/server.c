@@ -3,10 +3,10 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/socket.h>
+#include "io.h"
 #include "mem.h"
 #include "server.h"
-#include "io.h"
-//#include "channel.h"
+#include "channel.h"
 
 static void do_event(void* arg);
 static void on_accept(drpc_server_t server);
@@ -18,10 +18,9 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
     if (!server) {
         return NULL;
     }
-    STAILQ_INIT(&server->channels);
+    server->execute = (drpc_task_func)do_event;
+    TAILQ_INIT(&server->channels);
     server->actives = 0;
-    server->iotask.func = do_event;
-    server->iotask.arg = server;
     server->endpoint = drpc_listen(hostname, servname, 1024);
     if (server->endpoint == -1) {
         drpc_server_drop(server);
@@ -52,7 +51,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
         return NULL;
     }
     server->actives++;
-    drpc_thrpool_apply(&server->pool, &server->iotask);
+    drpc_thrpool_apply(&server->pool, (drpc_task_t)server);
     return server;
 }
 
@@ -93,6 +92,13 @@ void do_event(void* arg) {
         } else if (ev->ident == server->endpoint) {
             on_accept(server);
         } else {
+            drpc_channel_t chan = (drpc_channel_t)ev->udata;
+            if (drpc_channel_process(chan, ev->filter) != 0) {
+                DRPC_LOG(DEBUG, "channel fail [endpoint=%d]", chan->endpoint);
+                TAILQ_REMOVE(&server->channels, chan, entries);
+                server->actives--;
+                drpc_channel_drop(chan);
+            }
 #if 0
             drpc_channel_t chan = (drpc_channel_t)ev->udata;
             if (ev->filter & EVFILT_READ) {
@@ -105,7 +111,7 @@ void do_event(void* arg) {
         }
     }
     if (server->actives > 0) {
-        drpc_thrpool_apply(&server->pool, &server->iotask);
+        drpc_thrpool_apply(&server->pool, (drpc_task_t)server);
     }
 }
 
@@ -119,8 +125,21 @@ void on_accept(drpc_server_t server) {
             }
             break;
         }
+        drpc_channel_t chan = drpc_channel_new(sock);
+        if (!chan) {
+            close(sock);
+            continue;
+        }
+        chan->pool = &server->pool;
+        if (drpc_event_add(&server->event, sock,
+                    DRPC_EVENT_READ | DRPC_EVENT_WRITE | DRPC_EVENT_EDGE,
+                    chan) != 0) {
+            drpc_channel_drop(chan);
+            continue;
+        }
+        TAILQ_INSERT_TAIL(&server->channels, chan, entries);
+        server->actives++;
         DRPC_LOG(DEBUG, "server accept sock=%d", sock);
-        close(sock);
 #if 0
         drpc_channel_t chan = drpc_channel_new(sock);
         if (!chan) {

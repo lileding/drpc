@@ -3,7 +3,27 @@
 
 #include <stdint.h>
 #include <sys/queue.h>
+#include <sys/uio.h>
+#include "protocol.h"
 
+struct drpc_thrpool;
+
+struct drpc_channel {
+    TAILQ_ENTRY(drpc_channel) entries;
+    struct drpc_thrpool* pool;
+    int endpoint;
+    drpc_message_t input;
+    struct iovec iov;
+};
+typedef struct drpc_channel* drpc_channel_t;
+
+drpc_channel_t drpc_channel_new(int endpoint);
+
+void drpc_channel_drop(drpc_channel_t chan);
+
+int drpc_channel_process(drpc_channel_t chan, int16_t events);
+
+#if 0
 struct drpc_client;
 struct drpc_session;
 
@@ -42,6 +62,7 @@ void drpc_channel_send(drpc_channel_t chan, struct drpc_session* sess);
 
 void drpc_channel_shutdown_read(drpc_channel_t chan);
 void drpc_channel_shutdown_write(drpc_channel_t chan);
+#endif
 
 #endif /* DRPC_SRC_CHANNEL_H */
 

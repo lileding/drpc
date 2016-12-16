@@ -9,9 +9,87 @@
 #include <drpc.h>
 #include "io.h"
 #include "mem.h"
+#include "event.h"
 #include "session.h"
 #include "channel.h"
 
+static int drpc_channel_read(drpc_channel_t chan);
+
+drpc_channel_t drpc_channel_new(int endpoint) {
+    drpc_channel_t chan = (drpc_channel_t)drpc_alloc(sizeof(*chan));
+    chan->endpoint = endpoint;
+    return chan;
+}
+
+void drpc_channel_drop(drpc_channel_t chan) {
+    close(chan->endpoint);
+    drpc_free(chan);
+}
+
+int drpc_channel_process(drpc_channel_t chan, int16_t events) {
+    DRPC_LOG(DEBUG, "channel process [endpoint=%d] [events=%u]", chan->endpoint, events);
+    if (events & DRPC_EVENT_READ) {
+        DRPC_LOG(DEBUG, "channel read begin [endpoint=%d]", chan->endpoint);
+        int rv = drpc_channel_read(chan);
+        DRPC_LOG(DEBUG, "channel read end [endpoint=%d]", chan->endpoint);
+        if (rv == -1) {
+            return rv;
+        }
+    }
+    return 0;
+}
+
+int drpc_channel_read(drpc_channel_t chan) {
+    int fd = chan->endpoint;
+    int rv = DRPC_IO_FAIL;
+    while (1) {
+        if (!chan->input) {
+            chan->input = (drpc_message_t)drpc_alloc(sizeof(struct drpc_message));
+            if (!chan->input) {
+                DRPC_LOG(ERROR, "malloc fail: %s", strerror(errno));
+                return -1;
+            }
+            chan->input->body = NULL;
+            chan->iov.iov_base = &chan->input->header;
+            chan->iov.iov_len = sizeof(chan->input->header);
+        }
+        if (!chan->input->body) {
+            rv = drpc_read(fd, &chan->iov);
+            if (rv == DRPC_IO_BLOCK) {
+                break;
+            } else if (rv == DRPC_IO_FAIL) {
+                return -1;
+            } else {
+                size_t len = chan->input->header.payload;
+                chan->input->body = (char*)drpc_alloc(len);
+                if (!chan->input->body) {
+                    DRPC_LOG(ERROR, "malloc fail: %s", strerror(errno));
+                    return -1;
+                }
+                chan->iov.iov_base = chan->input->body;
+                chan->iov.iov_len = len;
+            }
+        }
+        rv = drpc_read(fd, &chan->iov);
+        if (rv == DRPC_IO_BLOCK) {
+            break;
+        } else if (rv == DRPC_IO_FAIL) {
+            return -1;
+        } else {
+            drpc_session_t sess = drpc_session_new(chan);
+            if (!sess) {
+                return -1;
+            }
+            sess->input = chan->input;
+            drpc_thrpool_apply(chan->pool, (drpc_task_t)sess);
+            chan->input = NULL;
+        }
+    }
+    DRPC_LOG(DEBUG, "channel block [endpoint=%d]", chan->endpoint);
+    return 0;
+}
+
+#if 0
 static void on_write(drpc_channel_t chan);
 static int drpc_channel_read(drpc_channel_t chan, drpc_session_t sess);
 static int drpc_channel_write(drpc_channel_t chan, drpc_session_t sess);
@@ -200,4 +278,5 @@ void drpc_channel_shutdown_write(drpc_channel_t chan) {
         shutdown(chan->endpoint, SHUT_WR);
     }
 }
+#endif
 

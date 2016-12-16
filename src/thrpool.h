@@ -5,17 +5,22 @@
 #include <pthread.h>
 #include <sys/queue.h>
 
+struct drpc_task;
+typedef void (*drpc_task_func)(struct drpc_task*);
+
+#define DRPC_TASK_BASE \
+    STAILQ_ENTRY(drpc_task) entries; \
+    void (*execute)(struct drpc_task*)
+
 struct drpc_task {
-    STAILQ_ENTRY(drpc_task) entries;
-    void (*func)(void*);
-    void* arg;
+    DRPC_TASK_BASE;
 };
 typedef struct drpc_task* drpc_task_t;
 
 struct drpc_thrpool {
     STAILQ_HEAD(, drpc_task) tasks;
     volatile size_t actives;
-    size_t token;
+    //size_t token;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     pthread_t* threads;

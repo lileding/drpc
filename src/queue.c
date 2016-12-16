@@ -2,6 +2,7 @@
 #include "protocol.h"
 #include "queue.h"
 
+#if 0
 void drpc_queue_open(drpc_queue_t q) {
     DRPC_ENSURE(q != NULL, "invalid argument");
     STAILQ_INIT(&q->queue);
@@ -67,4 +68,5 @@ int drpc_queue_pop(drpc_queue_t q, drpc_message_t** ptr) {
     *ptr = m;
     return 1;
 }
+#endif
 

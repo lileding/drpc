@@ -1,11 +1,11 @@
 APP=drpc
-SRC=$(wildcard *.cc)
-OBJ=$(patsubst %.cc,%.o,$(SRC))
+SRC=$(wildcard *.c)
+OBJ=$(patsubst %.c,%.o,$(SRC))
 
-CXX=clang++
-CXXFLAGS=-std=c++11 -g -Wall -fPIC -I../include
-LD=clang++
-LDFLAGS=
+CC=clang
+CFLAGS=-std=c11 -g -Wall -fPIC -I../include
+LD=clang
+LDFLAGS=-lpthread
 
 all: $(APP)
 
@@ -21,6 +21,6 @@ test: all
 $(APP): $(OBJ) ../libdrpc.a
 	$(LD) -o $@ $^ $(LDFLAGS)
 
-%.o: %.cc
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+%.o: %.c
+	$(CC) -c $(CFLAGS) -o $@ $<
 

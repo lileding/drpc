@@ -66,6 +66,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname);
 
 void drpc_server_drop(drpc_server_t server);
 
+#if 0
 /* CLIENT */
 struct drpc_client;
 typedef struct drpc_client* drpc_client_t;
@@ -85,6 +86,7 @@ void drpc_channel_call(
     drpc_channel_t chan, const char* request, size_t len,
     void (*callback)(const char*, size_t)
 );
+#endif
 
 #ifdef __cplusplus
 }

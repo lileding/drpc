@@ -3,47 +3,51 @@
 #include "channel.h"
 #include "session.h"
 
+static void do_session(drpc_session_t sess);
+
 drpc_session_t drpc_session_new(drpc_channel_t chan) {
     drpc_session_t sess = (drpc_session_t)drpc_alloc(sizeof(*sess));
     if (!sess) {
         return NULL;
     }
+    sess->execute = (drpc_task_func)do_session;
     sess->channel = chan;
-    sess->output.body = NULL;
-    sess->input.body = NULL;
-    sess->iov.iov_base = &sess->input.header;
-    sess->iov.iov_len = sizeof(sess->input.header);
-    sess->is_body = 0;
+    sess->input = NULL;
+    sess->output = NULL;
     return sess;
 }
 
-void drpc_session_process(drpc_session_t sess) {
-    drpc_message_t rmsg = &sess->input;
+void do_session(drpc_session_t sess) {
+    drpc_message_t rmsg = sess->input;
     //fprintf(stderr, "seq=%u payload=%u\n", rmsg->header.sequence, rmsg->header.payload);
     //fflush(stderr);
     //write(STDERR_FILENO, rmsg->body, rmsg->header.payload);
     //write(STDERR_FILENO, "\n", 1);
-    drpc_message_t smsg = &sess->output;
+    drpc_message_t smsg = (drpc_message_t)drpc_alloc(sizeof(*smsg));
+    // FIXME check fail
+    sess->output = rmsg;
     smsg->header.payload = rmsg->header.payload;
     smsg->body = drpc_alloc(rmsg->header.payload); // ECHO
     memcpy(smsg->body, rmsg->body, rmsg->header.payload); // ECHO
 
-    drpc_free(sess->input.body);
-    sess->input.body = NULL;
+    drpc_free(rmsg->body);
+    rmsg->body = NULL;
     smsg->header.sequence = rmsg->header.sequence;
 
-    drpc_channel_send(sess->channel, sess);
+    //drpc_channel_send(sess->channel, sess);
+    DRPC_LOG(NOTICE, "server receive & reply");
+    drpc_session_drop(sess);
 }
 
 void drpc_session_drop(drpc_session_t sess) {
     if (!sess) {
         return;
     }
-    if (sess->output.body != NULL) {
-        drpc_free(sess->output.body);
+    if (sess->output->body != NULL) {
+        drpc_free(sess->output->body);
     }
-    if (sess->input.body != NULL) {
-        drpc_free(sess->input.body);
+    if (sess->input->body != NULL) {
+        drpc_free(sess->input->body);
     }
     //DRPC_LOG(DEBUG, "free session %p", sess);
     drpc_free(sess);

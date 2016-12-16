@@ -1,37 +1,37 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <dlfcn.h>
+//#include <dlfcn.h>
 #include <drpc.h>
 #include "thrpool.h"
 #include "mem.h"
 
-static struct drpc_task g_stop = { NULL, (void(*)(void*))0x1, NULL };
+static struct drpc_task g_stop = { { NULL }, (drpc_task_func)0x1 };
 
 static void* drpc_thrpool_loop(void* arg) {
     drpc_thrpool_t pool = (drpc_thrpool_t)arg;
     pthread_mutex_lock(&pool->mutex);
-    size_t token = pool->token++;
+    //size_t token = pool->token++;
     drpc_task_t task = NULL;
     while (1) {
         while (STAILQ_EMPTY(&pool->tasks)) {
-            DRPC_LOG(DEBUG, "thrpool wait task [token=%zu] [actives=%zu]", token, pool->actives);
+            //DRPC_LOG(DEBUG, "thrpool wait task [token=%zu] [actives=%zu]", token, pool->actives);
             pthread_cond_wait(&pool->cond, &pool->mutex);
         }
         task = STAILQ_FIRST(&pool->tasks);
         STAILQ_REMOVE_HEAD(&pool->tasks, entries);
         pool->actives--;
-        DRPC_LOG(DEBUG, "thrpool consume task [token=%zu] [actives=%zu] [empty=%d]", token, pool->actives, STAILQ_EMPTY(&pool->tasks));
+        //DRPC_LOG(DEBUG, "thrpool consume task [token=%zu] [actives=%zu] [empty=%d]", token, pool->actives, STAILQ_EMPTY(&pool->tasks));
         pthread_mutex_unlock(&pool->mutex);
         if (task == &g_stop) {
-            DRPC_LOG(DEBUG, "thrpool got stop [token=%zu]", token);
+            //DRPC_LOG(DEBUG, "thrpool got stop [token=%zu]", token);
             break;
         }
-        Dl_info dli;
-        dladdr(task->func, &dli);
-        DRPC_LOG(DEBUG, "pool execute task [token=%zu] [task=%p] [func=%p:%s] [arg=%p]",
-            token, task, task->func, dli.dli_sname, task->arg);
-        task->func(task->arg);
+        //Dl_info dli;
+        //dladdr(task->execute, &dli);
+        //DRPC_LOG(DEBUG, "pool execute task [token=%zu] [task=%p] [execute=%p:%s]",
+        //    token, task, task->execute, dli.dli_sname);
+        task->execute(task);
         pthread_mutex_lock(&pool->mutex);
     }
     return NULL;
@@ -41,7 +41,7 @@ int drpc_thrpool_open(drpc_thrpool_t pool, size_t nthreads) {
     DRPC_ENSURE_OR(pool != NULL && nthreads > 0, -1, "invalid argument");
     STAILQ_INIT(&pool->tasks);
     pool->actives = 0;
-    pool->token = 0;
+    //pool->token = 0;
     pool->closed = 0;
     int err = pthread_mutex_init(&pool->mutex, NULL);
     if (err != 0) {
@@ -106,7 +106,7 @@ void drpc_thrpool_join(drpc_thrpool_t pool) {
 }
 
 void drpc_thrpool_apply(drpc_thrpool_t pool, drpc_task_t task) {
-    DRPC_ENSURE(pool != NULL && task != NULL && task->func != NULL, "invalid argument");
+    DRPC_ENSURE(pool != NULL && task != NULL && task->execute != NULL, "invalid argument");
     pthread_mutex_lock(&pool->mutex);
     if (pool->closed) {
         pthread_mutex_unlock(&pool->mutex);
@@ -115,9 +115,9 @@ void drpc_thrpool_apply(drpc_thrpool_t pool, drpc_task_t task) {
     }
     STAILQ_INSERT_TAIL(&pool->tasks, task, entries);
     pool->actives++;
-    DRPC_LOG(DEBUG, "thrpool apply %s [actives=%zu] [empty=%d]",
-        (task == &g_stop ? "stop" : "task"), pool->actives, STAILQ_EMPTY(&pool->tasks));
-    DRPC_LOG(DEBUG, "thrpool notify one [actives=%zu]", pool->actives);
+    //DRPC_LOG(DEBUG, "thrpool apply %s [actives=%zu] [empty=%d]",
+    //    (task == &g_stop ? "stop" : "task"), pool->actives, STAILQ_EMPTY(&pool->tasks));
+    //DRPC_LOG(DEBUG, "thrpool notify one [actives=%zu]", pool->actives);
     pthread_cond_signal(&pool->cond);
     pthread_mutex_unlock(&pool->mutex);
 }

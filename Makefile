@@ -1,5 +1,4 @@
 LIB=libdrpc.a
-OBJ=$(patsubst %.cc,%.o,$(wildcard src/*.cc)) $(patsubst %.c,%.o,$(wildcard src/*.c))
 OBJ=$(patsubst %.c,%.o,$(wildcard src/*.c))
 
 CC=clang
@@ -26,7 +25,4 @@ $(LIB): $(OBJ)
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
-
-%.o: %.cc
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
 

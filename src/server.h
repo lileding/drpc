@@ -10,12 +10,12 @@
 #include "thrpool.h"
 
 struct drpc_server {
+    DRPC_TASK_BASE;
     int endpoint;
     struct drpc_event event;
     drpc_signal_t quit;
     struct drpc_thrpool pool;
-    struct drpc_task iotask;
-    STAILQ_HEAD(, drpc_channel) channels;
+    TAILQ_HEAD(, drpc_channel) channels;
     volatile uint64_t actives;
 };
 
