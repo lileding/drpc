@@ -1,6 +1,7 @@
 #ifndef DRPC_SRC_SESSION_H
 #define DRPC_SRC_SESSION_H
 
+#include <sys/queue.h>
 #include "thrpool.h"
 
 struct drpc_channel;

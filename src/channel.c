@@ -14,15 +14,38 @@
 #include "channel.h"
 
 static int drpc_channel_read(drpc_channel_t chan);
+static int drpc_channel_write(drpc_channel_t chan);
 
 drpc_channel_t drpc_channel_new(int endpoint) {
     drpc_channel_t chan = (drpc_channel_t)drpc_alloc(sizeof(*chan));
     chan->endpoint = endpoint;
+    chan->input = NULL;
+    chan->iov.iov_base = NULL;
+    chan->iov.iov_len = 0;
+    STAILQ_INIT(&chan->outputs);
+    int err = pthread_mutex_init(&chan->qlock, NULL);
+    if (err != 0) {
+        DRPC_LOG(ERROR, "pthread_mutex_init fail: %s", strerror(err));
+        drpc_channel_drop(chan);
+        return NULL;
+    }
+    err = pthread_mutex_init(&chan->wlock, NULL);
+    if (err != 0) {
+        DRPC_LOG(ERROR, "pthread_mutex_init fail: %s", strerror(err));
+        drpc_channel_drop(chan);
+        return NULL;
+    }
+    chan->output = NULL;
+    chan->ovec.iov_base = NULL;
+    chan->ovec.iov_len = 0;
+    chan->is_body = 0;
     return chan;
 }
 
 void drpc_channel_drop(drpc_channel_t chan) {
     close(chan->endpoint);
+    pthread_mutex_destroy(&chan->wlock);
+    pthread_mutex_destroy(&chan->qlock);
     drpc_free(chan);
 }
 
@@ -36,7 +59,32 @@ int drpc_channel_process(drpc_channel_t chan, int16_t events) {
             return rv;
         }
     }
+    if (events & DRPC_EVENT_WRITE) {
+        DRPC_LOG(DEBUG, "channel write begin [endpoint=%d]", chan->endpoint);
+        pthread_mutex_lock(&chan->wlock);
+        int rv = drpc_channel_write(chan);
+        pthread_mutex_unlock(&chan->wlock);
+        DRPC_LOG(DEBUG, "channel read end [endpoint=%d]", chan->endpoint);
+        if (rv == -1) {
+            return rv;
+        }
+    }
     return 0;
+}
+
+void drpc_channel_send(drpc_channel_t chan, drpc_message_t msg) {
+    DRPC_ENSURE(chan != NULL && msg != NULL, "invalid argument");
+    pthread_mutex_lock(&chan->qlock);
+    STAILQ_INSERT_TAIL(&chan->outputs, msg, entries);
+    DRPC_LOG(DEBUG, "channel output enqueue [sequence=%x]", msg->header.sequence);
+    pthread_mutex_unlock(&chan->qlock);
+    pthread_mutex_lock(&chan->wlock);
+    int rv = drpc_channel_write(chan);
+    pthread_mutex_unlock(&chan->wlock);
+    if (rv != 0) {
+        DRPC_LOG(ERROR, "channel write fail: %s", strerror(errno));
+        // FIXME deal with error
+    }
 }
 
 int drpc_channel_read(drpc_channel_t chan) {
@@ -76,6 +124,7 @@ int drpc_channel_read(drpc_channel_t chan) {
         } else if (rv == DRPC_IO_FAIL) {
             return -1;
         } else {
+            DRPC_LOG(DEBUG, "channel read message [sequence=%x]", chan->input->header.sequence);
             drpc_session_t sess = drpc_session_new(chan);
             if (!sess) {
                 return -1;
@@ -85,7 +134,53 @@ int drpc_channel_read(drpc_channel_t chan) {
             chan->input = NULL;
         }
     }
-    DRPC_LOG(DEBUG, "channel block [endpoint=%d]", chan->endpoint);
+    DRPC_LOG(DEBUG, "channel block read [endpoint=%d]", chan->endpoint);
+    return 0;
+}
+
+int drpc_channel_write(drpc_channel_t chan) {
+    int fd = chan->endpoint;
+    int rv = DRPC_IO_FAIL;
+    while (1) {
+        if (chan->output == NULL) {
+            pthread_mutex_lock(&chan->qlock);
+            chan->output = STAILQ_FIRST(&chan->outputs);
+            if (chan->output == NULL) {
+                pthread_mutex_unlock(&chan->qlock);
+                DRPC_LOG(DEBUG, "channel block idle [endpoint=%d]", chan->endpoint);
+                return 0; 
+            }
+            STAILQ_REMOVE_HEAD(&chan->outputs, entries);
+            pthread_mutex_unlock(&chan->qlock);
+            chan->ovec.iov_base = &chan->output->header;
+            chan->ovec.iov_len = sizeof(chan->output->header);
+        }
+        if (!chan->is_body) {
+            rv = drpc_write(fd, &chan->ovec);
+            if (rv == DRPC_IO_BLOCK) {
+                break;
+            } else if (rv == DRPC_IO_FAIL) {
+                return -1;
+            } else {
+                chan->ovec.iov_base = chan->output->body;
+                chan->ovec.iov_len = chan->output->header.payload;
+                chan->is_body = 1;
+            }
+        }
+        rv = drpc_write(fd, &chan->ovec);
+        if (rv == DRPC_IO_BLOCK) {
+            break;
+        } else if (rv == DRPC_IO_FAIL) {
+            return -1;
+        } else {
+            DRPC_LOG(DEBUG, "channel write message [sequence=%x]", chan->output->header.sequence);
+            chan->output = NULL;
+            chan->ovec.iov_base = NULL;
+            chan->ovec.iov_len = 0;
+            chan->is_body = 0;
+        }
+    }
+    DRPC_LOG(DEBUG, "channel block write [endpoint=%d]", chan->endpoint);
     return 0;
 }
 

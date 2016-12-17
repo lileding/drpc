@@ -26,30 +26,23 @@ void do_session(drpc_session_t sess) {
     drpc_message_t smsg = (drpc_message_t)drpc_alloc(sizeof(*smsg));
     // FIXME check fail
     sess->output = rmsg;
+    smsg->header.sequence = rmsg->header.sequence;
+    DRPC_LOG(NOTICE, "session process [sequence=%x]", rmsg->header.sequence);
+
     smsg->header.payload = rmsg->header.payload;
     smsg->body = drpc_alloc(rmsg->header.payload); // ECHO
     memcpy(smsg->body, rmsg->body, rmsg->header.payload); // ECHO
 
     drpc_free(rmsg->body);
-    rmsg->body = NULL;
-    smsg->header.sequence = rmsg->header.sequence;
-
-    //drpc_channel_send(sess->channel, sess);
-    DRPC_LOG(NOTICE, "server receive & reply");
+    drpc_free(rmsg);
     drpc_session_drop(sess);
+    drpc_channel_send(sess->channel, smsg);
 }
 
 void drpc_session_drop(drpc_session_t sess) {
     if (!sess) {
         return;
     }
-    if (sess->output->body != NULL) {
-        drpc_free(sess->output->body);
-    }
-    if (sess->input->body != NULL) {
-        drpc_free(sess->input->body);
-    }
-    //DRPC_LOG(DEBUG, "free session %p", sess);
     drpc_free(sess);
 }
 
