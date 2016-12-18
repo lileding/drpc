@@ -4,8 +4,11 @@
 #include <stdint.h>
 #include <sys/event.h>
 
+#define DRPC_EVENT_LIMIT 1024
+
 struct drpc_event {
     int kq;
+    struct kevent evs[DRPC_EVENT_LIMIT];
 };
 typedef struct drpc_event* drpc_event_t;
 

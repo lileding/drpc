@@ -15,9 +15,6 @@ clean:
 
 rebuild: clean all
 
-test: all
-	./drpc
-
 $(APP): $(OBJ) ../libdrpc.a
 	$(LD) -o $@ $^ $(LDFLAGS)
 

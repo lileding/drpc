@@ -10,6 +10,7 @@ static const size_t size = 4UL * 1024 * 1024 * 1024;
 static size_t offset = 0;
 
 void* drpc_alloc(size_t len) {
+    return malloc(len); // FIXME
     if (base == NULL) {
         base = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
         if (base == MAP_FAILED) {
@@ -28,6 +29,7 @@ void* drpc_alloc(size_t len) {
 }
 
 void drpc_free(void* ptr) {
+    return; // FIXME
     if (ptr < base || ptr > base + size) {
         DRPC_LOG(FATAL, "free invalid ptr [base=%p] [limit=%p] [ptr=%p]",
             base, (char*)base + size, ptr

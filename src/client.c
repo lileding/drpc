@@ -1,3 +1,4 @@
+#if 0
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -9,7 +10,6 @@
 #include "channel.h"
 #include "client.h"
 
-#if 0
 static void* do_loop(void* arg);
 
 drpc_client_t drpc_client_new() {

@@ -6,7 +6,7 @@
 #include "thrpool.h"
 #include "mem.h"
 
-static struct drpc_task g_stop = { { NULL }, (drpc_task_func)0x1 };
+static struct drpc_task g_stop = { { NULL }, NULL, (drpc_task_func)0x1 };
 
 static void* drpc_thrpool_loop(void* arg) {
     drpc_thrpool_t pool = (drpc_thrpool_t)arg;
@@ -19,7 +19,7 @@ static void* drpc_thrpool_loop(void* arg) {
             pthread_cond_wait(&pool->cond, &pool->mutex);
         }
         task = STAILQ_FIRST(&pool->tasks);
-        STAILQ_REMOVE_HEAD(&pool->tasks, entries);
+        STAILQ_REMOVE_HEAD(&pool->tasks, __drpc_task_entries);
         pool->actives--;
         //DRPC_LOG(DEBUG, "thrpool consume task [token=%zu] [actives=%zu] [empty=%d]", token, pool->actives, STAILQ_EMPTY(&pool->tasks));
         pthread_mutex_unlock(&pool->mutex);
@@ -31,7 +31,7 @@ static void* drpc_thrpool_loop(void* arg) {
         //dladdr(task->execute, &dli);
         //DRPC_LOG(DEBUG, "pool execute task [token=%zu] [task=%p] [execute=%p:%s]",
         //    token, task, task->execute, dli.dli_sname);
-        task->execute(task);
+        task->__drpc_task_func(task);
         pthread_mutex_lock(&pool->mutex);
     }
     return NULL;
@@ -82,7 +82,7 @@ void drpc_thrpool_close(drpc_thrpool_t pool) {
     }
     pool->closed = 1;
     for (size_t i = 0; i < pool->size; i++) {
-        STAILQ_INSERT_TAIL(&pool->tasks, &g_stop, entries);
+        STAILQ_INSERT_TAIL(&pool->tasks, &g_stop, __drpc_task_entries);
         pool->actives++;
     }
     pthread_cond_broadcast(&pool->cond);
@@ -106,15 +106,17 @@ void drpc_thrpool_join(drpc_thrpool_t pool) {
 }
 
 void drpc_thrpool_apply(drpc_thrpool_t pool, drpc_task_t task) {
-    DRPC_ENSURE(pool != NULL && task != NULL && task->execute != NULL, "invalid argument");
+    DRPC_ENSURE(pool != NULL && task != NULL && task->__drpc_task_func != NULL,
+        "invalid argument");
     pthread_mutex_lock(&pool->mutex);
     if (pool->closed) {
         pthread_mutex_unlock(&pool->mutex);
         DRPC_LOG(WARNING, "thrpool apply but already closed");
         return;
     }
-    STAILQ_INSERT_TAIL(&pool->tasks, task, entries);
+    STAILQ_INSERT_TAIL(&pool->tasks, task, __drpc_task_entries);
     pool->actives++;
+    //DRPC_LOG(NOTICE, "thrpool apply [task=%p] [name=%s] [func=%p]", task, task->__drpc_task_name, task->__drpc_task_func);
     //DRPC_LOG(DEBUG, "thrpool apply %s [actives=%zu] [empty=%d]",
     //    (task == &g_stop ? "stop" : "task"), pool->actives, STAILQ_EMPTY(&pool->tasks));
     //DRPC_LOG(DEBUG, "thrpool notify one [actives=%zu]", pool->actives);

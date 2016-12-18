@@ -49,6 +49,8 @@ int drpc_signal_notify(drpc_signal_t sig) {
     if (len != sizeof(MSG)) {
         DRPC_LOG(ERROR, "write pipe fail: %s", strerror(errno));
     }
+    close(sig->notify);
+    sig->notify = -1;
     return len == sizeof(MSG) ? 0 : -1;
 }
 

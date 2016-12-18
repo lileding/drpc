@@ -64,7 +64,7 @@ typedef struct drpc_server* drpc_server_t;
 
 drpc_server_t drpc_server_new(const char* hostname, const char* servname);
 
-void drpc_server_drop(drpc_server_t server);
+void drpc_server_join(drpc_server_t server);
 
 #if 0
 /* CLIENT */
