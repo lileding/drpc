@@ -19,6 +19,8 @@ struct drpc_server {
     int endpoint;
     TAILQ_HEAD(, drpc_session) sessions;
     struct drpc_thrpool pool;
+    drpc_func stub_func;
+    void* stub_arg;
 };
 
 #endif /* DRPC_SRC_SERVER_H */

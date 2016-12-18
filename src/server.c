@@ -124,6 +124,13 @@ void drpc_server_join(drpc_server_t server) {
     DRPC_LOG(DEBUG, "server exit");
 }
 
+int drpc_server_register(drpc_server_t server, drpc_func stub, void* arg) {
+    DRPC_ENSURE_OR(server && stub, -1, "invalid argument");
+    server->stub_func = stub;
+    server->stub_arg = arg;
+    return 0;
+}
+
 void do_event(void* arg) {
     drpc_server_t server = (drpc_server_t)arg;
     DRPC_LOG(DEBUG, "server wait [endpoint=%d] [event=%d]",

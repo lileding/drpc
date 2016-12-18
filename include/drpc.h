@@ -13,7 +13,8 @@
 #define DRPC_LOGLEVEL_ERROR     5
 #define DRPC_LOGLEVEL_FATAL     6
 
-#define DRPC_STATUS_OK          0
+#define DRPC_STATUS_OK          200
+#define DRPC_STATUS_NOT_FOUND   404
 
 #define DRPC_LOG(level, fmt, ...) \
     do { \
@@ -48,23 +49,22 @@ int drpc_log(int level, const char* fmt, ...);
 
 int drpc_set_loglevel(int level);
 
-#if 0
 /* CONTROLLER */
-struct drpc_controller;
-typedef struct drpc_controller* drpc_controller_t;
+struct drpc_round;
+typedef struct drpc_round* drpc_round_t;
 
-drpc_controller_t drpc_controller_new();
+typedef void (*drpc_func)(drpc_round_t round, void* arg,
+    const char* request, uint32_t reqlen, char** response, uint32_t* resplen);
 
-void drpc_controller_drop(drpc_controller_t controller);
-
-void drpc_controller_wait(drpc_controller_t controller);
-#endif
+void drpc_round_complete(drpc_round_t round, uint16_t status);
 
 /* SERVER */
 struct drpc_server;
 typedef struct drpc_server* drpc_server_t;
 
 drpc_server_t drpc_server_new(const char* hostname, const char* servname);
+
+int drpc_server_register(drpc_server_t server, drpc_func func, void* arg);
 
 void drpc_server_join(drpc_server_t server);
 
@@ -138,7 +138,7 @@ public:
         _server(::drpc_server_new(hostname, servname)) { }
     inline ~Server() noexcept {
         if (_server) {
-            ::drpc_server_drop(_server);
+            ::drpc_server_join(_server);
         }
     }
     inline operator ::drpc_server_t() noexcept {
@@ -223,7 +223,6 @@ public:
 private:
     struct iovec _iov;
 };
-#endif
 
 class Client {
 public:
@@ -255,6 +254,7 @@ public:
 private:
     ::drpc_client_t _client;
 };
+#endif
 
 } /* namespace drpc */
 #endif /* __cplusplus */
