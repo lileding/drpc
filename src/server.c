@@ -129,13 +129,11 @@ void do_event(void* arg) {
     DRPC_LOG(DEBUG, "server wait [endpoint=%d] [event=%d]",
         server->endpoint, server->event.kq
     );
-    struct timespec timeout = { 1, 0 };
     int rv = kevent(
         server->event.kq,
         NULL, 0,
         server->event.evs, DRPC_EVENT_LIMIT,
         NULL
-        //&timeout
     );
     if (rv < 0) {
         DRPC_LOG(ERROR, "event fail: %s", strerror(errno));

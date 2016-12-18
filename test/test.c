@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, on_exit);
     signal(SIGTERM, on_exit);
     //drpc_set_loglevel(DRPC_LOGLEVEL_DEBUG);
-    //drpc_set_loglevel(DRPC_LOGLEVEL_NOTICE);
+    drpc_set_loglevel(DRPC_LOGLEVEL_NOTICE);
 
     drpc_server_t s = drpc_server_new("localhost", "12321");
     if (!s) {

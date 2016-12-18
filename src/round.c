@@ -21,6 +21,7 @@ drpc_round_t drpc_round_new(drpc_session_t sess) {
     round->session = sess;
     round->input = sess->input;
     memset(&round->output, 0, sizeof(round->output));
+    round->output.header.sequence = 100;
     return round;
 }
 
