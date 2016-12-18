@@ -6,14 +6,13 @@
 #include "protocol.h"
 
 struct drpc_session;
-struct drpc_message;
 
 struct drpc_round {
     DRPC_TASK_BASE;
     STAILQ_ENTRY(drpc_round) entries;
     struct drpc_session* session;
-    struct drpc_message* input;
-    struct drpc_message output;
+    drpc_request_t input;
+    struct drpc_response output;
 };
 typedef struct drpc_round* drpc_round_t;
 

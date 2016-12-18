@@ -32,7 +32,7 @@ void drpc_channel_close(drpc_channel_t chan) {
     close(chan->receive);
 }
 
-int drpc_channel_send(drpc_channel_t chan, void* ptr) {
+int drpc_channel_write(drpc_channel_t chan, void* ptr) {
     DRPC_ENSURE_OR(chan, -1, "invalid argument");
     ssize_t rv = write(chan->send, &ptr, sizeof(ptr));
     if (rv != sizeof(ptr)) {
@@ -43,7 +43,7 @@ int drpc_channel_send(drpc_channel_t chan, void* ptr) {
     }
 }
 
-void* drpc_channel_recv(drpc_channel_t chan) {
+void* drpc_channel_read(drpc_channel_t chan) {
     DRPC_ENSURE_OR(chan, NULL, "invalid argument");
     int rv = drpc_read(chan->receive, &chan->iov);
     if (rv == DRPC_IO_BLOCK) {

@@ -26,6 +26,7 @@ typedef struct drpc_task* drpc_task_t;
 
 struct drpc_thrpool {
     STAILQ_HEAD(, drpc_task) tasks;
+    struct drpc_task stop;
     volatile size_t actives;
     //size_t token;
     pthread_mutex_t mutex;

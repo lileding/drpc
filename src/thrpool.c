@@ -6,8 +6,6 @@
 #include "thrpool.h"
 #include "mem.h"
 
-static struct drpc_task g_stop = { { NULL }, NULL, (drpc_task_func)0x1 };
-
 static void* drpc_thrpool_loop(void* arg) {
     drpc_thrpool_t pool = (drpc_thrpool_t)arg;
     pthread_mutex_lock(&pool->mutex);
@@ -23,7 +21,7 @@ static void* drpc_thrpool_loop(void* arg) {
         pool->actives--;
         //DRPC_LOG(DEBUG, "thrpool consume task [token=%zu] [actives=%zu] [empty=%d]", token, pool->actives, STAILQ_EMPTY(&pool->tasks));
         pthread_mutex_unlock(&pool->mutex);
-        if (task == &g_stop) {
+        if (task == &pool->stop) {
             //DRPC_LOG(DEBUG, "thrpool got stop [token=%zu]", token);
             break;
         }
@@ -82,7 +80,7 @@ void drpc_thrpool_close(drpc_thrpool_t pool) {
     }
     pool->closed = 1;
     for (size_t i = 0; i < pool->size; i++) {
-        STAILQ_INSERT_TAIL(&pool->tasks, &g_stop, __drpc_task_entries);
+        STAILQ_INSERT_TAIL(&pool->tasks, &pool->stop, __drpc_task_entries);
         pool->actives++;
     }
     pthread_cond_broadcast(&pool->cond);

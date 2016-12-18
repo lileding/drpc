@@ -25,12 +25,15 @@
         drpc_session_t __dump_tmp = NULL; \
         int __dump_idx = 0; \
         if (TAILQ_EMPTY(q)) { \
-            DRPC_LOG(DEBUG, "DUMP session EMPTY"); \
+            DRPC_LOG(NOTICE, "DUMP session EMPTY"); \
         } else { \
             TAILQ_FOREACH(__dump_tmp, (q), entries) { \
-                DRPC_LOG(DEBUG, "DUMP session %03d [endpoint=%d]", \
-                    __dump_idx++, __dump_tmp->endpoint); \
+                __dump_idx++; \
+                continue; \
+                DRPC_LOG(NOTICE, "DUMP session %03d [endpoint=%d] [refcnt=%lu]", \
+                    __dump_idx, __dump_tmp->endpoint, __dump_tmp->refcnt); \
             } \
+            DRPC_LOG(NOTICE, "DUMP session [pending=%d]", __dump_idx++); \
         } \
     } while (0)
 
@@ -66,7 +69,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
     }
     if (drpc_event_open(&server->event) != 0) {
         drpc_channel_close(&server->chan);
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         drpc_signal_drop(server->quit);
         drpc_free(server);
         return NULL;
@@ -75,7 +78,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
                 DRPC_EVENT_READ | DRPC_EVENT_ONESHOT, NULL) != 0) {
         drpc_channel_close(&server->chan);
         drpc_event_close(&server->event);
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         drpc_signal_drop(server->quit);
         drpc_free(server);
         return NULL;
@@ -84,7 +87,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
                 DRPC_EVENT_READ, NULL) != 0) {
         drpc_channel_close(&server->chan);
         drpc_event_close(&server->event);
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         drpc_signal_drop(server->quit);
         drpc_free(server);
         return NULL;
@@ -93,7 +96,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
                 DRPC_EVENT_READ, NULL) != 0) {
         drpc_channel_close(&server->chan);
         drpc_event_close(&server->event);
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         drpc_signal_drop(server->quit);
         drpc_free(server);
         return NULL;
@@ -101,7 +104,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
     if (drpc_thrpool_open(&server->pool, 4) != 0) {
         drpc_channel_close(&server->chan);
         drpc_event_close(&server->event);
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         drpc_signal_drop(server->quit);
         drpc_free(server);
         return NULL;
@@ -127,7 +130,13 @@ void do_event(void* arg) {
         server->endpoint, server->event.kq
     );
     struct timespec timeout = { 1, 0 };
-    int rv = kevent(server->event.kq, NULL, 0, server->event.evs, DRPC_EVENT_LIMIT, &timeout);
+    int rv = kevent(
+        server->event.kq,
+        NULL, 0,
+        server->event.evs, DRPC_EVENT_LIMIT,
+        NULL
+        //&timeout
+    );
     if (rv < 0) {
         DRPC_LOG(ERROR, "event fail: %s", strerror(errno));
         on_quit(server);
@@ -173,7 +182,7 @@ void on_accept(drpc_server_t server) {
         }
         drpc_session_t sess = drpc_session_new(sock);
         if (!sess) {
-            close(sock);
+            shutdown(sock, SHUT_RDWR);
             continue;
         }
         sess->server = server;
@@ -187,13 +196,13 @@ void on_accept(drpc_server_t server) {
         DRPC_LOG(DEBUG, "server accept sock=%d", sock);
     }
     DRPC_LOG(ERROR, "accept fail: %s", strerror(errno));
-    close(server->endpoint);
+    shutdown(server->endpoint, SHUT_RDWR);
     server->endpoint = -1;
 }
 
 void on_remove(drpc_server_t server) {
     while (1) {
-        drpc_session_t sess = drpc_channel_recv(&server->chan);
+        drpc_session_t sess = drpc_channel_read(&server->chan);
         if (!sess) {
             break;
         }
@@ -205,15 +214,12 @@ void on_remove(drpc_server_t server) {
 void on_quit(drpc_server_t server) {
     DRPC_LOG(NOTICE, "server got quit signal");
     if (server->endpoint != -1) {
-        close(server->endpoint);
+        shutdown(server->endpoint, SHUT_RDWR);
         server->endpoint = -1;
     }
     drpc_session_t sess = NULL;
     TAILQ_FOREACH(sess, &server->sessions, entries) {
-        shutdown(sess->endpoint, SHUT_RD);
-    }
-    TAILQ_FOREACH(sess, &server->sessions, entries) {
-        drpc_session_process(sess); // would block by session write lock
+        drpc_session_close(sess);
     }
 }
 

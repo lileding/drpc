@@ -14,7 +14,7 @@ struct drpc_session {
     uint64_t refcnt;
     struct drpc_server* server;
     int endpoint;
-    drpc_message_t input;
+    drpc_request_t input;
     struct iovec ivec;
     pthread_mutex_t mutex;
     STAILQ_HEAD(, drpc_round) outputs;
@@ -25,6 +25,8 @@ struct drpc_session {
 typedef struct drpc_session* drpc_session_t;
 
 drpc_session_t drpc_session_new(int endpoint);
+
+void drpc_session_close(drpc_session_t sess);
 
 void drpc_session_drop(drpc_session_t sess);
 

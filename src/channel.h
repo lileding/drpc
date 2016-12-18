@@ -20,9 +20,9 @@ int drpc_channel_open(drpc_channel_t chan);
 
 void drpc_channel_close(drpc_channel_t chan);
 
-int drpc_channel_send(drpc_channel_t chan, void* ptr);
+void* drpc_channel_read(drpc_channel_t chan);
 
-void* drpc_channel_recv(drpc_channel_t chan);
+int drpc_channel_write(drpc_channel_t chan, void* ptr);
 
 #endif /* DRPC_SRC_CHANNEL_H */
 

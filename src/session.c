@@ -42,7 +42,7 @@ drpc_session_t drpc_session_new(int endpoint) {
 void drpc_session_drop(drpc_session_t sess) {
     DRPC_ENSURE(sess, "invalid argument");
     DRPC_LOG(NOTICE, "session drop [endpoint=%d]", sess->endpoint);
-    close(sess->endpoint);
+    shutdown(sess->endpoint, SHUT_RDWR);
     pthread_mutex_destroy(&sess->mutex);
     drpc_free(sess);
 }
@@ -52,6 +52,17 @@ void drpc_session_process(drpc_session_t sess) {
     do_read(sess);
     pthread_mutex_lock(&sess->mutex);
     do_write(sess);
+    pthread_mutex_unlock(&sess->mutex);
+}
+
+void drpc_session_close(drpc_session_t sess) {
+    DRPC_LOG(DEBUG, "session begin draining [endpoint=%d]", sess->endpoint);
+    shutdown(sess->endpoint, SHUT_RD);
+    drpc_session_process(sess);
+    pthread_mutex_lock(&sess->mutex);
+    if (sess->refcnt % 2 == 1) {
+        DRPC_LOG(ERROR, "session drain fail");
+    }
     pthread_mutex_unlock(&sess->mutex);
 }
 
@@ -69,7 +80,7 @@ void do_read(drpc_session_t sess) {
     int rv = DRPC_IO_FAIL;
     while (1) {
         if (!sess->input) {
-            sess->input = (drpc_message_t)drpc_alloc(sizeof(struct drpc_message));
+            sess->input = (drpc_request_t)drpc_alloc(sizeof(struct drpc_request));
             if (!sess->input) {
                 DRPC_LOG(ERROR, "malloc fail: %s", strerror(errno));
                 break;
@@ -109,7 +120,7 @@ void do_read(drpc_session_t sess) {
             }
             sess->input = NULL;
             pthread_mutex_lock(&sess->mutex);
-            sess->refcnt++;
+            sess->refcnt += 2;
             pthread_mutex_unlock(&sess->mutex);
             drpc_thrpool_apply(&sess->server->pool, (drpc_task_t)round);
         }
@@ -143,6 +154,9 @@ void do_write(drpc_session_t sess) {
                 sess->ovec.iov_base = sess->output->output.body;
                 sess->ovec.iov_len = sess->output->output.header.payload;
                 sess->is_body = 1;
+                if (sess->output->output.header.sequence == 0) {
+                    DRPC_LOG(ERROR, "session write incorrect");
+                }
             }
         }
         rv = drpc_write(fd, &sess->ovec);
@@ -153,7 +167,7 @@ void do_write(drpc_session_t sess) {
         } else {
             DRPC_LOG(DEBUG, "session write message [sequence=%x]",
                 sess->output->output.header.sequence);
-            sess->refcnt--;
+            sess->refcnt -= 2;
             sess->ovec.iov_base = NULL;
             sess->ovec.iov_len = 0;
             sess->is_body = 0;
@@ -164,16 +178,16 @@ void do_write(drpc_session_t sess) {
     if (round) {
         drpc_round_drop(round);
         sess->output = NULL;
-        sess->refcnt--;
+        sess->refcnt -= 2;
     }
     while (!STAILQ_EMPTY(&sess->outputs)) {
         round = STAILQ_FIRST(&sess->outputs);
         STAILQ_REMOVE_HEAD(&sess->outputs, entries);
         drpc_round_drop(round);
-        sess->refcnt--;
+        sess->refcnt -= 2;
     }
     if (sess->refcnt == 0) {
-        drpc_channel_send(&sess->server->chan, sess);
+        drpc_channel_write(&sess->server->chan, sess);
     }
 }
 

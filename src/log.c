@@ -16,7 +16,7 @@ const char* drpc_now(char* buf, size_t bufsz) {
     return buf;
 }
 
-static int drpc_loglevel = DRPC_LOGLEVEL_NOTICE;
+static int drpc_loglevel = DRPC_LOGLEVEL_WARNING;
 
 int drpc_log(int level, const char* fmt, ...) {
     if (level < drpc_loglevel) {

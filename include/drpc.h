@@ -13,6 +13,8 @@
 #define DRPC_LOGLEVEL_ERROR     5
 #define DRPC_LOGLEVEL_FATAL     6
 
+#define DRPC_STATUS_OK          0
+
 #define DRPC_LOG(level, fmt, ...) \
     do { \
         char __buf[27] = {'\0'}; \
