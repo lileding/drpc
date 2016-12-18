@@ -2,24 +2,23 @@
 #define DRPC_SRC_SESSION_H
 
 #include <stdint.h>
-#include <stdatomic.h>
 #include <pthread.h>
 #include <sys/queue.h>
 #include <sys/uio.h>
-#include "protocol.h"
+#include "round.h"
 
 struct drpc_server;
 
 struct drpc_session {
     TAILQ_ENTRY(drpc_session) entries;
-    atomic_int_least64_t refcnt;
+    uint64_t refcnt;
     struct drpc_server* server;
     int endpoint;
     drpc_message_t input;
     struct iovec ivec;
     pthread_mutex_t mutex;
-    STAILQ_HEAD(, drpc_message) outputs;
-    drpc_message_t output;
+    STAILQ_HEAD(, drpc_round) outputs;
+    drpc_round_t output;
     struct iovec ovec;
     unsigned is_body:1;
 };
@@ -27,9 +26,11 @@ typedef struct drpc_session* drpc_session_t;
 
 drpc_session_t drpc_session_new(int endpoint);
 
-void drpc_session_process(drpc_session_t chan, int16_t events);
+void drpc_session_drop(drpc_session_t sess);
 
-void drpc_session_send(drpc_session_t chan, drpc_message_t msg);
+void drpc_session_process(drpc_session_t chan);
+
+void drpc_session_send(drpc_session_t chan, drpc_round_t round);
 
 #endif /* DRPC_SRC_SESSION_H */
 

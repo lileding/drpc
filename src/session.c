@@ -10,18 +10,17 @@
 #include "io.h"
 #include "mem.h"
 #include "event.h"
+#include "channel.h"
 #include "round.h"
 #include "server.h"
 #include "session.h"
 
-static void do_addref(drpc_session_t sess);
-static void do_release(drpc_session_t sess);
 static void do_read(drpc_session_t sess);
 static void do_write(drpc_session_t sess);
 
 drpc_session_t drpc_session_new(int endpoint) {
     drpc_session_t sess = (drpc_session_t)drpc_alloc(sizeof(*sess));
-    atomic_init(&sess->refcnt, 1);
+    sess->refcnt = 1;
     sess->endpoint = endpoint;
     sess->input = NULL;
     sess->ivec.iov_base = NULL;
@@ -30,7 +29,7 @@ drpc_session_t drpc_session_new(int endpoint) {
     int err = pthread_mutex_init(&sess->mutex, NULL);
     if (err != 0) {
         DRPC_LOG(ERROR, "pthread_mutex_init fail: %s", strerror(err));
-        // FIXME
+        drpc_free(sess);
         return NULL;
     }
     sess->output = NULL;
@@ -40,23 +39,27 @@ drpc_session_t drpc_session_new(int endpoint) {
     return sess;
 }
 
-void drpc_session_process(drpc_session_t sess, int16_t events) {
-    DRPC_LOG(DEBUG, "session process [endpoint=%d] [events=%u]", sess->endpoint, events);
-    if (events & DRPC_EVENT_READ) {
-        do_read(sess);
-    }
-    if (events & DRPC_EVENT_WRITE) {
-        pthread_mutex_lock(&sess->mutex);
-        do_write(sess);
-        pthread_mutex_unlock(&sess->mutex);
-    }
+void drpc_session_drop(drpc_session_t sess) {
+    DRPC_ENSURE(sess, "invalid argument");
+    DRPC_LOG(NOTICE, "session drop [endpoint=%d]", sess->endpoint);
+    close(sess->endpoint);
+    pthread_mutex_destroy(&sess->mutex);
+    drpc_free(sess);
 }
 
-void drpc_session_send(drpc_session_t sess, drpc_message_t msg) {
-    DRPC_ENSURE(sess != NULL && msg != NULL, "invalid argument");
+void drpc_session_process(drpc_session_t sess) {
+    DRPC_LOG(DEBUG, "session process [endpoint=%d]", sess->endpoint);
+    do_read(sess);
     pthread_mutex_lock(&sess->mutex);
-    STAILQ_INSERT_TAIL(&sess->outputs, msg, entries);
-    DRPC_LOG(DEBUG, "session output enqueue [sequence=%x]", msg->header.sequence);
+    do_write(sess);
+    pthread_mutex_unlock(&sess->mutex);
+}
+
+void drpc_session_send(drpc_session_t sess, drpc_round_t round) {
+    DRPC_ENSURE(sess != NULL && round != NULL, "invalid argument");
+    pthread_mutex_lock(&sess->mutex);
+    STAILQ_INSERT_TAIL(&sess->outputs, round, entries);
+    DRPC_LOG(DEBUG, "session output enqueue [sequence=%x]", round->output.header.sequence);
     do_write(sess);
     pthread_mutex_unlock(&sess->mutex);
 }
@@ -104,27 +107,31 @@ void do_read(drpc_session_t sess) {
             if (!round) {
                 break;
             }
-            round->input = sess->input;
             sess->input = NULL;
+            pthread_mutex_lock(&sess->mutex);
+            sess->refcnt++;
+            pthread_mutex_unlock(&sess->mutex);
             drpc_thrpool_apply(&sess->server->pool, (drpc_task_t)round);
         }
     }
-    do_release(sess);
+    pthread_mutex_lock(&sess->mutex);
+    sess->refcnt--;
+    pthread_mutex_unlock(&sess->mutex);
 }
 
 void do_write(drpc_session_t sess) {
     int fd = sess->endpoint;
     int rv = DRPC_IO_FAIL;
     while (1) {
-        if (sess->output == NULL) {
+        if (!sess->output) {
             sess->output = STAILQ_FIRST(&sess->outputs);
-            if (sess->output == NULL) {
+            if (!sess->output) {
                 DRPC_LOG(DEBUG, "session block idle [endpoint=%d]", sess->endpoint);
-                return; 
+                break; 
             }
             STAILQ_REMOVE_HEAD(&sess->outputs, entries);
-            sess->ovec.iov_base = &sess->output->header;
-            sess->ovec.iov_len = sizeof(sess->output->header);
+            sess->ovec.iov_base = &sess->output->output.header;
+            sess->ovec.iov_len = sizeof(sess->output->output.header);
         }
         if (!sess->is_body) {
             rv = drpc_write(fd, &sess->ovec);
@@ -133,8 +140,8 @@ void do_write(drpc_session_t sess) {
             } else if (rv == DRPC_IO_FAIL) {
                 break;
             } else {
-                sess->ovec.iov_base = sess->output->body;
-                sess->ovec.iov_len = sess->output->header.payload;
+                sess->ovec.iov_base = sess->output->output.body;
+                sess->ovec.iov_len = sess->output->output.header.payload;
                 sess->is_body = 1;
             }
         }
@@ -145,25 +152,28 @@ void do_write(drpc_session_t sess) {
             break;
         } else {
             DRPC_LOG(DEBUG, "session write message [sequence=%x]",
-                sess->output->header.sequence);
-            sess->output = NULL;
+                sess->output->output.header.sequence);
+            sess->refcnt--;
             sess->ovec.iov_base = NULL;
             sess->ovec.iov_len = 0;
             sess->is_body = 0;
+            sess->output = STAILQ_FIRST(&sess->outputs);
         }
     }
-    do_release(sess);
-}
-
-void do_addref(drpc_session_t sess) {
-    atomic_fetch_add(&sess->refcnt, 1);
-}
-
-void do_release(drpc_session_t sess) {
-    if (atomic_fetch_sub(&sess->refcnt, 1) > 1) {
-        return;
+    drpc_round_t round = sess->output;
+    if (round) {
+        drpc_round_drop(round);
+        sess->output = NULL;
+        sess->refcnt--;
     }
-    drpc_server_remove(sess->server, sess);
-    // FIXME release resource
+    while (!STAILQ_EMPTY(&sess->outputs)) {
+        round = STAILQ_FIRST(&sess->outputs);
+        STAILQ_REMOVE_HEAD(&sess->outputs, entries);
+        drpc_round_drop(round);
+        sess->refcnt--;
+    }
+    if (sess->refcnt == 0) {
+        drpc_channel_send(&sess->server->chan, sess);
+    }
 }
 

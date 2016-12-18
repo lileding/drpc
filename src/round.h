@@ -3,15 +3,17 @@
 
 #include <sys/queue.h>
 #include "thrpool.h"
+#include "protocol.h"
 
 struct drpc_session;
 struct drpc_message;
 
 struct drpc_round {
     DRPC_TASK_BASE;
+    STAILQ_ENTRY(drpc_round) entries;
     struct drpc_session* session;
     struct drpc_message* input;
-    struct drpc_message* output;
+    struct drpc_message output;
 };
 typedef struct drpc_round* drpc_round_t;
 
