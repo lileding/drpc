@@ -8,7 +8,7 @@
 #include "signal.h"
 
 drpc_signal_t drpc_signal_new() {
-    drpc_signal_t sig = (drpc_signal_t)drpc_alloc(sizeof(*sig));
+    drpc_signal_t sig = drpc_new(drpc_signal);
     sig->wait = -1;
     sig->notify = -1;
     if (pipe(sig->fildes) == -1) {
@@ -25,9 +25,7 @@ drpc_signal_t drpc_signal_new() {
 }
 
 void drpc_signal_drop(drpc_signal_t sig) {
-    if (!sig) {
-        return;
-    }
+    DRPC_ENSURE(sig, "invalid argument");
     if (sig->wait != -1) {
         close(sig->wait);
     }
@@ -38,12 +36,12 @@ void drpc_signal_drop(drpc_signal_t sig) {
 }
 
 int drpc_signal_yield(drpc_signal_t sig) {
-    DRPC_ENSURE_OR(sig, -1, "invalid argument");
+    DRPC_ENSURE(sig, "invalid argument");
     return sig->wait;
 }
 
 int drpc_signal_notify(drpc_signal_t sig) {
-    DRPC_ENSURE_OR(sig, -1, "invalid argument");
+    DRPC_ENSURE(sig, "invalid argument");
     static const char MSG[] = { '\0' };
     ssize_t len = write(sig->notify, MSG, sizeof(MSG));
     if (len != sizeof(MSG)) {

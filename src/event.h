@@ -24,5 +24,7 @@ void drpc_event_close(drpc_event_t event);
 int drpc_event_add(drpc_event_t event, intptr_t ident,
         uint32_t flags, void* data);
 
+void drpc_event_del(drpc_event_t event, int ident);
+
 #endif /* DRPC_SRC_EVENT_H */
 

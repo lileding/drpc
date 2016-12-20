@@ -8,22 +8,25 @@
 #include "event.h"
 
 int drpc_event_open(drpc_event_t event) {
-    DRPC_ENSURE_OR(event, -1, "invalid argument");
+    DRPC_ENSURE(event, "invalid argument");
     int kq = kqueue();
-    DRPC_ENSURE_OR(kq != -1, -1, "kevent fail: %s", strerror(errno));
+    if (kq == -1) {
+        DRPC_LOG(ERROR, "kevent fail: %s", strerror(errno));
+        return -1;
+    }
     event->kq = kq;
     return 0;
 }
 
 void drpc_event_close(drpc_event_t event) {
-    if (!event || event->kq == -1) return;
+    DRPC_ENSURE(event, "invalid argument");
     close(event->kq);
     event->kq = -1;
 }
 
 int drpc_event_add(drpc_event_t event, intptr_t ident,
         uint32_t flags, void* data) {
-    DRPC_ENSURE_OR(event && event->kq != -1, -1, "invalid argument");
+    DRPC_ENSURE(event, "invalid argument");
     struct kevent ev;
     int16_t ev_filter = 0;
     uint16_t ev_flags = EV_ADD;
@@ -41,5 +44,12 @@ int drpc_event_add(drpc_event_t event, intptr_t ident,
     }
     EV_SET(&ev, ident, ev_filter, ev_flags, 0, 0, data);
     return kevent(event->kq, &ev, 1, NULL, 0, NULL);
+}
+
+void drpc_event_del(drpc_event_t event, int ident) {
+    DRPC_ENSURE(event, "invalid argument");
+    struct kevent ev;
+    EV_SET(&ev, ident, EVFILT_READ | EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+    kevent(event->kq, &ev, 1, NULL, 0, NULL);
 }
 

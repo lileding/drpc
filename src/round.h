@@ -11,8 +11,8 @@ struct drpc_round {
     DRPC_TASK_BASE;
     STAILQ_ENTRY(drpc_round) entries;
     struct drpc_session* session;
-    drpc_request_t input;
-    struct drpc_response output;
+    drpc_request_t request;
+    struct drpc_response response;
 };
 typedef struct drpc_round* drpc_round_t;
 

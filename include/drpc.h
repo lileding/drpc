@@ -26,16 +26,7 @@
 #define DRPC_ENSURE(expr, fmt...) \
     do { \
         if (!(expr)) { \
-            DRPC_LOG(ERROR, fmt); \
-            return; \
-        } \
-    } while (0)
-
-#define DRPC_ENSURE_OR(expr, val, fmt...) \
-    do { \
-        if (!(expr)) { \
-            DRPC_LOG(ERROR, fmt); \
-            return (val); \
+            DRPC_LOG(FATAL, fmt); \
         } \
     } while (0)
 

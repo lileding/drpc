@@ -7,6 +7,7 @@
 #include "mem.h"
 
 static void* drpc_thrpool_loop(void* arg) {
+    DRPC_ENSURE(arg, "invalid argument");
     drpc_thrpool_t pool = (drpc_thrpool_t)arg;
     pthread_mutex_lock(&pool->mutex);
     //size_t token = pool->token++;
@@ -36,7 +37,7 @@ static void* drpc_thrpool_loop(void* arg) {
 }
 
 int drpc_thrpool_open(drpc_thrpool_t pool, size_t nthreads) {
-    DRPC_ENSURE_OR(pool != NULL && nthreads > 0, -1, "invalid argument");
+    DRPC_ENSURE(pool && nthreads > 0, "invalid argument");
     STAILQ_INIT(&pool->tasks);
     pool->actives = 0;
     //pool->token = 0;
@@ -54,7 +55,7 @@ int drpc_thrpool_open(drpc_thrpool_t pool, size_t nthreads) {
         return -1;
     }
     pool->size = nthreads;
-    pool->threads = (pthread_t*)drpc_alloc(sizeof(pthread_t) * nthreads);
+    pool->threads = (pthread_t*)drpc_alloc2("pthread_t[]", sizeof(pthread_t) * nthreads);
     if (!pool->threads) {
         DRPC_LOG(ERROR, "malloc fail: %s", strerror(errno));
         return -1;
@@ -72,7 +73,7 @@ int drpc_thrpool_open(drpc_thrpool_t pool, size_t nthreads) {
 }
 
 void drpc_thrpool_close(drpc_thrpool_t pool) {
-    DRPC_ENSURE(pool != NULL, "invalid argument");
+    DRPC_ENSURE(pool, "invalid argument");
     pthread_mutex_lock(&pool->mutex);
     if (pool->closed) {
         pthread_mutex_unlock(&pool->mutex);
@@ -88,9 +89,7 @@ void drpc_thrpool_close(drpc_thrpool_t pool) {
 }
 
 void drpc_thrpool_join(drpc_thrpool_t pool) {
-    if (!pool) {
-        return;
-    }
+    DRPC_ENSURE(pool, "invalid argument");
     if (pool->threads) {
         for (size_t i = 0; i < pool->size; i++) {
             if (pool->threads[i] != 0) {
@@ -104,8 +103,11 @@ void drpc_thrpool_join(drpc_thrpool_t pool) {
 }
 
 void drpc_thrpool_apply(drpc_thrpool_t pool, drpc_task_t task) {
-    DRPC_ENSURE(pool != NULL && task != NULL && task->__drpc_task_func != NULL,
-        "invalid argument");
+    DRPC_ENSURE(pool, "invalid argument");
+    if (!task || !task->__drpc_task_func) {
+        DRPC_LOG(ERROR, "invalid argument");
+        return;
+    }
     pthread_mutex_lock(&pool->mutex);
     if (pool->closed) {
         pthread_mutex_unlock(&pool->mutex);

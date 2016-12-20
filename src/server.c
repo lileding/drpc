@@ -29,9 +29,14 @@
         } else { \
             TAILQ_FOREACH(__dump_tmp, (q), entries) { \
                 __dump_idx++; \
-                continue; \
-                DRPC_LOG(NOTICE, "DUMP session %03d [endpoint=%d] [refcnt=%lu]", \
-                    __dump_idx, __dump_tmp->endpoint, __dump_tmp->refcnt); \
+                DRPC_LOG(NOTICE, \
+                    "DUMP session %03d " \
+                        "[endpoint=%d] [draining=%d] [actives=%lu]", \
+                    __dump_idx, \
+                    __dump_tmp->endpoint, \
+                    __dump_tmp->draining, \
+                    __dump_tmp->actives \
+                ); \
             } \
             DRPC_LOG(NOTICE, "DUMP session [pending=%d]", __dump_idx++); \
         } \
@@ -43,13 +48,17 @@ static void on_quit(drpc_server_t server);
 static void on_remove(drpc_server_t server);
 
 drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
-    DRPC_ENSURE_OR(hostname && servname, NULL, "invalid argument");
-    drpc_server_t server = (drpc_server_t)drpc_alloc(sizeof(*server));
+    if (!hostname || !servname) {
+        DRPC_LOG(ERROR, "invalid argument");
+        return NULL;
+    }
+    drpc_server_t server = drpc_new(drpc_server);
     if (!server) {
         return NULL;
     }
     DRPC_TASK_INIT(server, "server", do_event);
     TAILQ_INIT(&server->sessions);
+    TAILQ_INIT(&server->recycle);
     server->quit = drpc_signal_new();
     if (!server->quit) {
         drpc_free(server);
@@ -114,7 +123,7 @@ drpc_server_t drpc_server_new(const char* hostname, const char* servname) {
 }
 
 void drpc_server_join(drpc_server_t server) {
-    DRPC_ENSURE(server != NULL, "invalid argument");
+    DRPC_ENSURE(server, "invalid argument");
     drpc_signal_notify(server->quit);
     drpc_thrpool_join(&server->pool);
     drpc_event_close(&server->event);
@@ -125,7 +134,11 @@ void drpc_server_join(drpc_server_t server) {
 }
 
 int drpc_server_register(drpc_server_t server, drpc_func stub, void* arg) {
-    DRPC_ENSURE_OR(server && stub, -1, "invalid argument");
+    DRPC_ENSURE(server, "invalid argument");
+    if (!stub) {
+        DRPC_LOG(ERROR, "invalid argument");
+        return -1;
+    }
     server->stub_func = stub;
     server->stub_arg = arg;
     return 0;
@@ -156,8 +169,20 @@ void do_event(void* arg) {
             on_accept(server);
         } else {
             drpc_session_t sess = (drpc_session_t)ev->udata;
-            drpc_session_process(sess);
+            if (ev->filter & EVFILT_READ) {
+                drpc_session_read(sess);
+            }
+            if (ev->filter & EVFILT_WRITE) {
+                drpc_session_write(sess);
+            }
         }
+    }
+    drpc_session_t sess = TAILQ_FIRST(&server->recycle);
+    drpc_session_t sess2 = NULL;
+    while (sess) {
+        sess2 = TAILQ_NEXT(sess, entries);
+        drpc_session_drop(sess);
+        sess = sess2;
     }
     if (server->endpoint == -1) {
         if (TAILQ_EMPTY(&server->sessions)) {
@@ -185,7 +210,7 @@ void on_accept(drpc_server_t server) {
                 break;
             }
         }
-        drpc_session_t sess = drpc_session_new(sock);
+        drpc_session_t sess = drpc_session_new(sock, server);
         if (!sess) {
             shutdown(sock, SHUT_RDWR);
             continue;
@@ -206,13 +231,13 @@ void on_accept(drpc_server_t server) {
 }
 
 void on_remove(drpc_server_t server) {
+    drpc_channel_wait(&server->chan);
     while (1) {
         drpc_session_t sess = drpc_channel_read(&server->chan);
         if (!sess) {
             break;
         }
-        TAILQ_REMOVE(&server->sessions, sess, entries);
-        drpc_session_drop(sess);
+        drpc_session_close(sess);
     }
 }
 
@@ -224,7 +249,8 @@ void on_quit(drpc_server_t server) {
     }
     drpc_session_t sess = NULL;
     TAILQ_FOREACH(sess, &server->sessions, entries) {
-        drpc_session_close(sess);
+        shutdown(sess->endpoint, SHUT_RD);
+        drpc_session_read(sess);
     }
 }
 

@@ -18,6 +18,7 @@ struct drpc_server {
     struct drpc_event event;
     int endpoint;
     TAILQ_HEAD(, drpc_session) sessions;
+    TAILQ_HEAD(, drpc_session) recycle;
     struct drpc_thrpool pool;
     drpc_func stub_func;
     void* stub_arg;
