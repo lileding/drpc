@@ -12,12 +12,14 @@
 int drpc_write(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = write(fd, iov->iov_base, iov->iov_len);
-        if (len <= 0) {
+        if (len < 0) {
             if (errno == EAGAIN) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
             }
+        } else if (len == 0) {
+            return DRPC_IO_FAIL;
         } else {
             iov->iov_base = (char*)iov->iov_base + len;
             iov->iov_len -= len;
@@ -29,12 +31,14 @@ int drpc_write(int fd, struct iovec* iov) {
 int drpc_read(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = read(fd, iov->iov_base, iov->iov_len);
-        if (len <= 0) {
+        if (len < 0) {
             if (errno == EAGAIN) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
             }
+        } else if (len == 0) {
+            return DRPC_IO_FAIL;
         } else {
             iov->iov_base = (char*)iov->iov_base + len;
             iov->iov_len -= len;

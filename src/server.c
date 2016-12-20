@@ -177,12 +177,11 @@ void do_event(void* arg) {
             }
         }
     }
-    drpc_session_t sess = TAILQ_FIRST(&server->recycle);
-    drpc_session_t sess2 = NULL;
-    while (sess) {
-        sess2 = TAILQ_NEXT(sess, entries);
+    drpc_session_t sess = NULL;
+    while (!TAILQ_EMPTY(&server->recycle)) {
+        sess = TAILQ_FIRST(&server->recycle);
+        TAILQ_REMOVE(&server->recycle, sess, entries);
         drpc_session_drop(sess);
-        sess = sess2;
     }
     if (server->endpoint == -1) {
         if (TAILQ_EMPTY(&server->sessions)) {

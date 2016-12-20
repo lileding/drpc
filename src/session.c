@@ -51,6 +51,21 @@ void drpc_session_drop(drpc_session_t sess) {
     drpc_free(sess);
 }
 
+void drpc_session_close(drpc_session_t sess) {
+    DRPC_ENSURE(sess, "invalid argument");
+    DRPC_LOG(NOTICE, "session begin close [endpoint=%d]", sess->endpoint);
+    pthread_mutex_lock(&sess->mutex);
+    do_write(sess);
+    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings)) {
+        drpc_event_del(&sess->server->event, sess->endpoint);
+        TAILQ_REMOVE(&sess->server->sessions, sess, entries);
+        TAILQ_INSERT_TAIL(&sess->server->recycle, sess, entries);
+    } else {
+        sess->dying = 1; // wait for last write to recycle
+    }
+    pthread_mutex_unlock(&sess->mutex);
+}
+
 void drpc_session_read(drpc_session_t sess) {
     DRPC_ENSURE(sess, "invalid argument");
     if (sess->draining) {
@@ -95,7 +110,18 @@ void drpc_session_read(drpc_session_t sess) {
             drpc_thrpool_apply(&sess->server->pool, (drpc_task_t)round);
         }
     }
+    if (sess->input) {
+        if (sess->input->body) {
+            drpc_free(sess->input->body);
+            sess->input->body = NULL;
+        }
+        drpc_free(sess->input);
+        sess->input = NULL;
+    }
+    sess->ivec.iov_base = NULL;
+    sess->ivec.iov_len = 0;
     pthread_mutex_lock(&sess->mutex);
+    DRPC_LOG(NOTICE, "session begin draining [endpoint=%d]", sess->endpoint);
     sess->draining = 1;
     if (sess->actives == 0) {
         drpc_channel_write(&sess->server->chan, sess);
@@ -124,21 +150,6 @@ void drpc_session_send(drpc_session_t sess, drpc_round_t round) {
     sess->actives--;
     if (sess->draining && sess->actives == 0) {
         drpc_channel_write(&sess->server->chan, sess);
-    }
-    pthread_mutex_unlock(&sess->mutex);
-}
-
-void drpc_session_close(drpc_session_t sess) {
-    DRPC_ENSURE(sess, "invalid argument");
-    DRPC_LOG(NOTICE, "session begin close [endpoint=%d]", sess->endpoint);
-    pthread_mutex_lock(&sess->mutex);
-    do_write(sess);
-    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings)) {
-        drpc_event_del(&sess->server->event, sess->endpoint);
-        TAILQ_REMOVE(&sess->server->sessions, sess, entries);
-        TAILQ_INSERT_TAIL(&sess->server->recycle, sess, entries);
-    } else {
-        sess->dying = 1; // wait for last write to recycle
     }
     pthread_mutex_unlock(&sess->mutex);
 }
@@ -187,19 +198,17 @@ void do_write(drpc_session_t sess) {
             sess->output = STAILQ_FIRST(&sess->pendings);
         }
     }
-    /*
-    drpc_round_t round = sess->output;
-    if (round) {
-        drpc_round_drop(round);
+    if (sess->output) {
+        drpc_round_drop(sess->output);
         sess->output = NULL;
-        sess->ovec.iov_base = NULL;
-        sess->ovec.iov_len = 0;
     }
-    while (!STAILQ_EMPTY(&sess->pendings)) {
-        round = STAILQ_FIRST(&sess->pendings);
+    drpc_round_t round = STAILQ_FIRST(&sess->pendings);
+    drpc_round_t round2 = NULL;
+    while (round) {
+        round2 = STAILQ_NEXT(round, entries);
         STAILQ_REMOVE_HEAD(&sess->pendings, entries);
         drpc_round_drop(round);
+        round = round2;
     }
-    */
 }
 
