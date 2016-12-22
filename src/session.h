@@ -5,14 +5,17 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include <sys/uio.h>
+#include "task.h"
+#include "event.h"
 #include "round.h"
 
 struct drpc_server;
 
 struct drpc_session {
+    DRPC_EVENT_BASE(endpoint);
+    struct drpc_task close;
     TAILQ_ENTRY(drpc_session) entries;
     struct drpc_server* server;
-    int endpoint;
     drpc_request_t input;
     struct iovec ivec;
     /* BEGIN mutex protected */
@@ -31,13 +34,10 @@ typedef struct drpc_session* drpc_session_t;
 drpc_session_t drpc_session_new(int endpoint, struct drpc_server* server);
 
 /* thread safe with server, called by server */
-void drpc_session_close(drpc_session_t sess);
-
-/* thread safe with server, called by server */
 void drpc_session_drop(drpc_session_t sess);
 
 /* thread safe with server, called by server */
-void drpc_session_read(drpc_session_t chan);
+void drpc_session_read(drpc_session_t sess);
 
 /* should be protected by mutex, called by server */
 void drpc_session_write(drpc_session_t chan);

@@ -4,25 +4,7 @@
 #include <stddef.h>
 #include <pthread.h>
 #include <sys/queue.h>
-
-struct drpc_task;
-typedef void (*drpc_task_func)(struct drpc_task*);
-
-#define DRPC_TASK_BASE \
-    STAILQ_ENTRY(drpc_task) __drpc_task_entries; \
-    const char* __drpc_task_name; \
-    void (*__drpc_task_func)(struct drpc_task*)
-
-#define DRPC_TASK_INIT(task, name, func) \
-    do { \
-        (task)->__drpc_task_name = (name); \
-        (task)->__drpc_task_func = (drpc_task_func)(func); \
-    } while (0)
-
-struct drpc_task {
-    DRPC_TASK_BASE;
-};
-typedef struct drpc_task* drpc_task_t;
+#include "task.h"
 
 struct drpc_thrpool {
     STAILQ_HEAD(, drpc_task) tasks;

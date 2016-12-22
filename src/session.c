@@ -10,18 +10,28 @@
 #include "io.h"
 #include "mem.h"
 #include "event.h"
-#include "channel.h"
+#include "mpsc.h"
 #include "round.h"
 #include "server.h"
 #include "session.h"
 
+static void on_event(drpc_session_t sess, uint16_t flags);
+static void do_read(drpc_session_t sess);
 static void do_write(drpc_session_t sess);
+static void do_close(drpc_task_t task);
 
 drpc_session_t drpc_session_new(int endpoint, drpc_server_t server) {
     DRPC_ENSURE(server, "invalid argument");
     drpc_session_t sess = drpc_new(drpc_session);
+    DRPC_EVENT_INIT(sess, endpoint, on_event,
+        DRPC_EVENT_READ | DRPC_EVENT_WRITE | DRPC_EVENT_EDGE);
+    if (drpc_select_add(server->source, (drpc_event_t)sess) != 0) {
+        drpc_session_drop(sess);
+        return NULL;
+    }
     sess->server = server;
-    sess->endpoint = endpoint;
+    DRPC_TASK_INIT(&sess->close, "session-close", do_close);
+    sess->server = server;
     sess->draining = 0;
     sess->dying = 0;
     sess->input = NULL;
@@ -51,23 +61,50 @@ void drpc_session_drop(drpc_session_t sess) {
     drpc_free(sess);
 }
 
-void drpc_session_close(drpc_session_t sess) {
+void drpc_session_read(drpc_session_t sess) {
     DRPC_ENSURE(sess, "invalid argument");
-    DRPC_LOG(NOTICE, "session begin close [endpoint=%d]", sess->endpoint);
+    do_read(sess);
+}
+
+void drpc_session_write(drpc_session_t sess) {
+    DRPC_ENSURE(sess, "invalid argument");
     pthread_mutex_lock(&sess->mutex);
     do_write(sess);
-    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings)) {
-        drpc_event_del(&sess->server->event, sess->endpoint);
-        TAILQ_REMOVE(&sess->server->sessions, sess, entries);
+    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings) && sess->dying) {
+        drpc_select_del(sess->server->source, (drpc_event_t)sess);
+        TAILQ_REMOVE(&sess->server->actives, sess, entries);
         TAILQ_INSERT_TAIL(&sess->server->recycle, sess, entries);
-    } else {
-        sess->dying = 1; // wait for last write to recycle
     }
     pthread_mutex_unlock(&sess->mutex);
 }
 
-void drpc_session_read(drpc_session_t sess) {
+void drpc_session_send(drpc_session_t sess, drpc_round_t round) {
+    DRPC_ENSURE(sess && round, "invalid argument");
+    pthread_mutex_lock(&sess->mutex);
+    STAILQ_INSERT_TAIL(&sess->pendings, round, entries);
+    DRPC_LOG(DEBUG, "session output enqueue [sequence=%x]",
+        round->response.header.sequence);
+    do_write(sess);
+    sess->actives--;
+    if (sess->draining && sess->actives == 0) {
+        drpc_mpsc_send(sess->server->mpsc, &sess->close);
+    }
+    pthread_mutex_unlock(&sess->mutex);
+}
+
+void on_event(drpc_session_t sess, uint16_t flags) {
     DRPC_ENSURE(sess, "invalid argument");
+    if (flags & DRPC_EVENT_READ) {
+        do_read(sess);
+    }
+    if (flags & DRPC_EVENT_WRITE) {
+        pthread_mutex_lock(&sess->mutex);
+        do_write(sess);
+        pthread_mutex_unlock(&sess->mutex);
+    }
+}
+
+void do_read(drpc_session_t sess) {
     if (sess->draining) {
         DRPC_LOG(WARNING, "session read but draining, exit");
         return;
@@ -124,32 +161,7 @@ void drpc_session_read(drpc_session_t sess) {
     DRPC_LOG(NOTICE, "session begin draining [endpoint=%d]", sess->endpoint);
     sess->draining = 1;
     if (sess->actives == 0) {
-        drpc_channel_write(&sess->server->chan, sess);
-    }
-    pthread_mutex_unlock(&sess->mutex);
-}
-
-void drpc_session_write(drpc_session_t sess) {
-    pthread_mutex_lock(&sess->mutex);
-    do_write(sess);
-    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings) && sess->dying) {
-        drpc_event_del(&sess->server->event, sess->endpoint);
-        TAILQ_REMOVE(&sess->server->sessions, sess, entries);
-        TAILQ_INSERT_TAIL(&sess->server->recycle, sess, entries);
-    }
-    pthread_mutex_unlock(&sess->mutex);
-}
-
-void drpc_session_send(drpc_session_t sess, drpc_round_t round) {
-    DRPC_ENSURE(sess && round, "invalid argument");
-    pthread_mutex_lock(&sess->mutex);
-    STAILQ_INSERT_TAIL(&sess->pendings, round, entries);
-    DRPC_LOG(DEBUG, "session output enqueue [sequence=%x]",
-        round->response.header.sequence);
-    do_write(sess);
-    sess->actives--;
-    if (sess->draining && sess->actives == 0) {
-        drpc_channel_write(&sess->server->chan, sess);
+        drpc_mpsc_send(sess->server->mpsc, &sess->close);
     }
     pthread_mutex_unlock(&sess->mutex);
 }
@@ -210,5 +222,21 @@ void do_write(drpc_session_t sess) {
         drpc_round_drop(round);
         round = round2;
     }
+}
+
+void do_close(drpc_task_t task) {
+    drpc_session_t sess = DRPC_VBASE(drpc_session, task, close);
+    DRPC_ENSURE(sess, "invalid argument");
+    DRPC_LOG(NOTICE, "session begin close [endpoint=%d]", sess->endpoint);
+    pthread_mutex_lock(&sess->mutex);
+    do_write(sess);
+    if (sess->output == NULL && STAILQ_EMPTY(&sess->pendings)) {
+        drpc_select_del(sess->server->source, (drpc_event_t)sess);
+        TAILQ_REMOVE(&sess->server->actives, sess, entries);
+        TAILQ_INSERT_TAIL(&sess->server->recycle, sess, entries);
+    } else {
+        sess->dying = 1; // wait for last write to recycle
+    }
+    pthread_mutex_unlock(&sess->mutex);
 }
 

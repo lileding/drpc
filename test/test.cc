@@ -51,7 +51,7 @@ void on_exit(int sig) {
 void work(drpc_round_t round, void* arg,
         const char* request, uint32_t reqlen,
         char** response, uint32_t* resplen) {
-#if 0
+#if 1
     *resplen = reqlen;
     *response = (char*)malloc(reqlen);
     strncpy(*response, request, reqlen);
