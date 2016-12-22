@@ -29,7 +29,7 @@ const char* drpc_now(char* buf, size_t bufsz) {
     size_t len = strftime(buf, bufsz, "%Y-%m-%d %H:%M:%S",
             localtime_r(&tv.tv_sec, &ltm));
     if (len <= bufsz) {
-        snprintf(buf + len, bufsz - len, ".%06d", tv.tv_usec);
+        snprintf(buf + len, bufsz - len, ".%06ld", tv.tv_usec);
     }
     return buf;
 }

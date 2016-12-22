@@ -1,6 +1,7 @@
 #ifndef DRPC_H
 #define DRPC_H
 
+#include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>

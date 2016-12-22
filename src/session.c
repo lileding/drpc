@@ -4,7 +4,6 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-#include <sys/event.h>
 #include <sys/socket.h>
 #include <drpc.h>
 #include "io.h"

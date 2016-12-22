@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <drpc.h>
 
-static int g_run = 1;
+static volatile int g_run = 1;
 
 static void on_exit(int);
 static void work(drpc_round_t round, void* arg,
@@ -13,10 +13,14 @@ static void work(drpc_round_t round, void* arg,
 
 int main(int argc, char* argv[]) {
     signal(SIGPIPE, SIG_IGN);
-    signal(SIGINT, on_exit);
-    signal(SIGTERM, on_exit);
+    struct sigaction sa;
+    sa.sa_handler = on_exit;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_NODEFER | SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
     //drpc_set_loglevel(DRPC_LOGLEVEL_DEBUG);
-    //drpc_set_loglevel(DRPC_LOGLEVEL_NOTICE);
+    drpc_set_loglevel(DRPC_LOGLEVEL_NOTICE);
 
     ::drpc::Server s { "localhost", "12321" };
     if (!s) {

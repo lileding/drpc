@@ -1,10 +1,11 @@
+#include <stddef.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/uio.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/uio.h>
 #include <netdb.h>
 #include <drpc.h>
 #include "io.h"

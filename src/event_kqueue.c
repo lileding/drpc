@@ -1,3 +1,5 @@
+#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -86,4 +88,6 @@ int drpc_select_wait(drpc_select_t sel, struct timespec* timeout) {
     }
     return 0;
 }
+
+#endif /* BSD based */
 

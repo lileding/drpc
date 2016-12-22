@@ -2,11 +2,9 @@ APP=drpc
 SRC=$(wildcard *.cc)
 OBJ=$(patsubst %.cc,%.o,$(SRC))
 
-CC=clang
-CFLAGS=-std=c11 -g -Wall -fPIC -I../include
-CXX=clang++
+CXX=c++
 CXXFLAGS=-std=c++11 -g -Wall -fPIC -I../include
-LD=clang++
+LD=c++
 LDFLAGS=-lpthread
 
 all: $(APP)
