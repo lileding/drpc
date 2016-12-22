@@ -106,7 +106,6 @@ void on_event(drpc_session_t sess, uint16_t flags) {
 
 void do_read(drpc_session_t sess) {
     if (sess->draining) {
-        DRPC_LOG(WARNING, "session read but draining, exit");
         return;
     }
     int fd = sess->endpoint;

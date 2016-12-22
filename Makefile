@@ -2,9 +2,8 @@ LIB=libdrpc.a
 OBJ=$(patsubst %.c,%.o,$(wildcard src/*.c))
 
 CC=clang
-CXX=clang++
-CFLAGS=-std=c11 -g -Wall -fPIC -Iinclude
-CXXFLAGS=-std=c++11 -g -Wall -fPIC -Iinclude
+#CPPFLAGS=-DDRPC_DEBUG
+CFLAGS=-std=c11 $(CPPFLAGS) -g -Wall -fPIC -Iinclude
 AR=ar
 ARFLAGS=rc
 

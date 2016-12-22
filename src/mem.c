@@ -8,6 +8,7 @@
 #include <drpc.h>
 #include "mem.h"
 
+#ifdef DRPC_DEBUG
 #define DRPC_BACKTRACE() \
     do { \
         void *__bt_buf[100]; \
@@ -40,8 +41,10 @@ static void drpc_check() {
         DRPC_LOG(ERROR, "LEAK %p [type=%s] [size=%zu]", mem, mem->type, mem->len);
     }
 }
+#endif /* DRPC_DEBUG */
 
 void* drpc_alloc2(const char* type, size_t len) {
+#ifdef DRPC_DEBUG
     size_t rlen = sizeof(struct drpc_mem) + len;
     drpc_mem_t ptr = (drpc_mem_t)malloc(rlen);
     if (!ptr) {
@@ -55,6 +58,9 @@ void* drpc_alloc2(const char* type, size_t len) {
     ptr->released = 0;
     pthread_mutex_unlock(&g_mtx);
     return (void*)ptr + sizeof(struct drpc_mem);
+#else
+    return malloc(len);
+#endif
 }
 
 void* drpc_alloc(size_t len) {
@@ -62,6 +68,7 @@ void* drpc_alloc(size_t len) {
 }
 
 void drpc_free(void* ptr) {
+#ifdef DRPC_DEBUG
     drpc_mem_t mem = (drpc_mem_t)(ptr - sizeof(struct drpc_mem));
     DRPC_LOG(DEBUG, "free %p [type=%s] [size=%zu]", ptr, mem->type, mem->len);
     pthread_mutex_lock(&g_mtx);
@@ -72,8 +79,10 @@ void drpc_free(void* ptr) {
     } else {
         TAILQ_REMOVE(&g_mem, mem, entries);
         mem->released = 1;
-        //free(mem);
     }
     pthread_mutex_unlock(&g_mtx);
+#else
+    free(ptr);
+#endif
 }
 
