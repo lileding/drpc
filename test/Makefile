@@ -11,16 +11,15 @@ all: $(APP)
 
 .PHONY: clean
 clean:
-	rm -f $(APP) $(OBJ)
+	@rm -f $(APP) $(OBJ)
 
 rebuild: clean all
 
 $(APP): $(OBJ) ../libdrpc.a
-	$(LD) -o $@ $^ $(LDFLAGS)
-
-%.o: %.c
-	$(CC) -c $(CFLAGS) -o $@ $<
+	@echo "LD $@"
+	@$(LD) -o $@ $^ $(LDFLAGS)
 
 %.o: %.cc
-	$(CXX) -c $(CXXFLAGS) -o $@ $<
+	@echo "CXX $<"
+	@$(CXX) -c $(CXXFLAGS) -o $@ $<
 

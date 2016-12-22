@@ -11,17 +11,19 @@ all: $(LIB)
 
 .PHONY: clean
 clean:
-	rm -f $(LIB) $(OBJ)
-	make -C test clean
+	@rm -f $(LIB) $(OBJ)
+	@make -C test clean
 
 rebuild: clean all
 
 test: all
-	make -C test all
+	@make -C test all
 
 $(LIB): $(OBJ)
-	$(AR) $(ARFLAGS) $@ $^
+	@echo "AR $@"
+	@$(AR) $(ARFLAGS) $@ $^
 
 %.o: %.c
-	$(CC) -c $(CFLAGS) -o $@ $<
+	@echo "CC $<"
+	@$(CC) -c $(CFLAGS) -o $@ $<
 
