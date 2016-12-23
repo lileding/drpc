@@ -156,7 +156,7 @@ void on_accept(drpc_event_t ev, uint16_t flags) {
     while (1) {
         sock = accept(serv->acceptor.__drpc_event_ident, NULL, NULL);
         if (sock == -1) {
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return;
             } else if (errno == ECONNABORTED) {
                 continue;

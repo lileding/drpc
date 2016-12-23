@@ -14,7 +14,7 @@ int drpc_write(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = write(fd, iov->iov_base, iov->iov_len);
         if (len < 0) {
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
@@ -33,7 +33,7 @@ int drpc_read(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = read(fd, iov->iov_base, iov->iov_len);
         if (len < 0) {
-            if (errno == EAGAIN) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
@@ -71,7 +71,7 @@ int drpc_listen(const char* hostname, const char* servname, int backlog) {
         freeaddrinfo(ai);
         return -1;
     }
-    if (drpc_set_nonblock(sock)) {
+    if (drpc_set_nonblock(sock) != 0) {
         DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
         close(sock);
         freeaddrinfo(ai);
@@ -128,7 +128,7 @@ int drpc_connect(const char* hostname, const char* servname) {
         freeaddrinfo(ai);
         return -1;
     }
-    if (drpc_set_nonblock(sock) == -1) {
+    if (drpc_set_nonblock(sock) != 0) {
         DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
         close(sock);
         return -1;
