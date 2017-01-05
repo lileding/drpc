@@ -14,7 +14,7 @@ int drpc_write(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = write(fd, iov->iov_base, iov->iov_len);
         if (len < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
@@ -33,12 +33,13 @@ int drpc_read(int fd, struct iovec* iov) {
     while (iov->iov_len > 0) {
         ssize_t len = read(fd, iov->iov_base, iov->iov_len);
         if (len < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN) {
                 return DRPC_IO_BLOCK;
             } else {
                 return DRPC_IO_FAIL;
             }
         } else if (len == 0) {
+            DRPC_LOG(DEBUG, "read eof [fd=%d] [iov_base=%p] [iov_len=%zu]", fd, iov->iov_base, iov->iov_len);
             return DRPC_IO_FAIL;
         } else {
             iov->iov_base = (char*)iov->iov_base + len;

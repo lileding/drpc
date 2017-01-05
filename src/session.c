@@ -21,17 +21,9 @@ static void do_close(drpc_task_t task);
 
 drpc_session_t drpc_session_new(int endpoint, drpc_server_t server) {
     DRPC_ENSURE(server, "invalid argument");
-    if (drpc_set_nonblock(endpoint) != 0) {
-        DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
-        return NULL;
-    }
     drpc_session_t sess = drpc_new(drpc_session);
     DRPC_EVENT_INIT(sess, endpoint, on_event,
         DRPC_EVENT_READ | DRPC_EVENT_WRITE | DRPC_EVENT_EDGE);
-    if (drpc_select_add(server->source, (drpc_event_t)sess) != 0) {
-        drpc_session_drop(sess);
-        return NULL;
-    }
     sess->server = server;
     DRPC_TASK_INIT(&sess->close, "session-close", do_close);
     sess->server = server;
@@ -149,6 +141,7 @@ void do_read(drpc_session_t sess) {
             drpc_thrpool_apply(&sess->server->pool, (drpc_task_t)round);
         }
     }
+    DRPC_LOG(INFO, "session read fail [errno=%d,%d]: %s", errno, EAGAIN, strerror(errno));
     if (sess->input) {
         if (sess->input->body) {
             drpc_free(sess->input->body);

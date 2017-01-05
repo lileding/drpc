@@ -3,3 +3,5 @@
 *.o
 *.a
 /test/drpc.dSYM
+/test/server
+/test/client

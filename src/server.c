@@ -156,7 +156,7 @@ void on_accept(drpc_event_t ev, uint16_t flags) {
     while (1) {
         sock = accept(serv->acceptor.__drpc_event_ident, NULL, NULL);
         if (sock == -1) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN) {
                 return;
             } else if (errno == ECONNABORTED) {
                 continue;
@@ -164,12 +164,22 @@ void on_accept(drpc_event_t ev, uint16_t flags) {
                 break;
             }
         }
+        if (drpc_set_nonblock(sock) != 0) {
+            DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
+            shutdown(sock, SHUT_RDWR);
+            continue;
+        }
         drpc_session_t sess = drpc_session_new(sock, serv);
         if (!sess) {
             shutdown(sock, SHUT_RDWR);
             continue;
         }
         TAILQ_INSERT_TAIL(&serv->actives, sess, entries);
+        if (drpc_select_add(serv->source, (drpc_event_t)sess) != 0) {
+            TAILQ_REMOVE(&serv->actives, sess, entries);
+            drpc_session_drop(sess);
+            continue;
+        }
         DRPC_LOG(DEBUG, "server accept sock=%d", sock);
     }
     DRPC_LOG(ERROR, "accept fail: %s", strerror(errno));
