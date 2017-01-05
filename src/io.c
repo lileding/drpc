@@ -72,7 +72,7 @@ int drpc_listen(const char* hostname, const char* servname, int backlog) {
         freeaddrinfo(ai);
         return -1;
     }
-    if (drpc_set_nonblock(sock) != 0) {
+    if (drpc_set_nonblock(sock)) {
         DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
         close(sock);
         freeaddrinfo(ai);
@@ -129,7 +129,7 @@ int drpc_connect(const char* hostname, const char* servname) {
         freeaddrinfo(ai);
         return -1;
     }
-    if (drpc_set_nonblock(sock) != 0) {
+    if (drpc_set_nonblock(sock) == -1) {
         DRPC_LOG(ERROR, "set_nonblock fail: %s", strerror(errno));
         close(sock);
         return -1;
